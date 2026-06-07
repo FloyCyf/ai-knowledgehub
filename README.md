@@ -58,7 +58,91 @@ ai-knowledgehub/
 - `docs/api-spec.md`：接口规范说明。
 - `docs/api-openapi.yaml`：OpenAPI 草案。
 - `docs/database-design.md`：数据库表设计建议。
+- `docs/database-init.sql`：数据库初始化脚本。
 - `docs/task-list.md`：按开发阶段拆分的任务清单。
 - `docs/coding-standards.md`：代码规范与统一约定。
 - `docs/deployment-notes.md`：本地环境和生产环境说明。
+
+## 快速启动
+
+### 1. 启动基础设施
+
+```bash
+cd ai-knowledgehub
+docker-compose up -d
+```
+
+启动的服务：
+- MySQL 8.0 (端口 3306)
+- Redis 7 (端口 6379)
+- RabbitMQ 3 (端口 5672, 管理界面 15672)
+
+### 2. 初始化数据库
+
+连接 MySQL 执行 `docs/database-init.sql`：
+
+```bash
+mysql -h localhost -u root -p root123456 ai_knowledgehub < docs/database-init.sql
+```
+
+### 3. 编译项目
+
+```bash
+mvn clean install -DskipTests
+```
+
+### 4. 启动服务
+
+```bash
+# 启动 article-service (端口 8082)
+cd article-service
+mvn spring-boot:run
+
+# 启动 ranking-service (端口 8083)
+cd ranking-service
+mvn spring-boot:run
+```
+
+### 5. 测试接口
+
+导入 `postman/AI-KnowledgeHub.postman_collection.json` 到 Postman 进行测试。
+
+## 组员 B 负责模块
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| common | ✅ 已完成 | 公共模块：统一返回、异常处理、JWT工具 |
+| article-service | ✅ 已完成 | 文章服务：CRUD、评论、点赞、MQ消息 |
+| ranking-service | ✅ 已完成 | 热榜服务：Redis ZSET 热度计算、Top10 |
+| database-init.sql | ✅ 已完成 | 数据库初始化脚本 |
+| Postman 测试集 | ✅ 已完成 | API 测试集合 |
+
+### 核心接口
+
+**article-service (端口 8082)**
+- `POST /api/articles/draft` - 创建草稿
+- `PUT /api/articles/{id}` - 修改文章
+- `POST /api/articles/{id}/publish` - 发布文章
+- `DELETE /api/articles/{id}` - 删除文章
+- `GET /api/articles/latest` - 文章列表
+- `GET /api/articles/{id}` - 文章详情
+- `POST /api/articles/{id}/comments` - 发表评论
+- `GET /api/articles/{id}/comments` - 评论列表
+- `POST /api/articles/{id}/like` - 点赞文章
+
+**ranking-service (端口 8083)**
+- `GET /api/ranking/top10` - 热榜 Top10
+- `POST /api/ranking/articles/{id}/view` - 阅读热度+1
+- `POST /api/ranking/articles/{id}/like` - 点赞热度+5
+- `POST /api/ranking/articles/{id}/comment` - 评论热度+3
+- `POST /api/ranking/articles/{id}/publish` - 发布热度+2
+
+### 热度规则
+
+| 行为 | 热度增量 |
+|------|----------|
+| 阅读文章 | +1 |
+| 发布文章 | +2 |
+| 评论文章 | +3 |
+| 点赞文章 | +5 |
 
