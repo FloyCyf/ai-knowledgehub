@@ -1,0 +1,74 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+  profiles:
+    active: dev
+
+  # 统一数据源配置（供 Spring Cloud LoadBalancer 使用）
+  cloud:
+    loadbalancer:
+      ribbon:
+        enabled: false
+    gateway:
+      # 关闭 CORS 跨域简写配置，由 GlobalFilter 统一处理
+      # 路由见 routes 节
+      routes:
+        # ============== 业务服务路由（占位，C/A 实现具体 Filter 后会继续完善） ==============
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/user/**
+        - id: article-service
+          uri: lb://article-service
+          predicates:
+            - Path=/api/articles/**
+        - id: ranking-service
+          uri: lb://ranking-service
+          predicates:
+            - Path=/api/ranking/**
+        # ai-service 由 C 负责创建后再添加路由
+        # ============== 管理员接口走 user-service ==============
+        - id: admin-routes
+          uri: lb://user-service
+          predicates:
+            - Path=/api/admin/**
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+swagger:
+  enabled: false  # 网关自身不暴露 Swagger，只做聚合（阶段 5）
+
+logging:
+  level:
+    org.springframework.cloud.gateway: info
+    com.ai.knowledgehub: debug
+
+jwt:
+  secret: ${JWT_SECRET:ai-knowledgehub-default-secret-key-for-jwt-token-generation-2024-do-not-use-in-prod}
+  expiration-millis: ${JWT_EXPIRATION:86400000}
+
+rate-limit:
+  enabled: true
+  default-window-seconds: 10
+  default-max-requests: 20
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
