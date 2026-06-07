@@ -1,33 +1,91 @@
+# ============================================
+# AI-KnowledgeHub 本地开发环境
+# 启动中间件：MySQL / Redis / RabbitMQ
+# ============================================
+
 services:
   mysql:
     image: mysql:8.0
     container_name: akh-mysql
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root123456
-      MYSQL_DATABASE: ai_knowledgehub
-      MYSQL_USER: akh
-      MYSQL_PASSWORD: akh123456
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ai_knowledgehub}
+      MYSQL_USER: ${MYSQL_USER:-akh}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-akh123456}
+      TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+      # 自动初始化数据库（首次启动生效）
+      - ./docs/database-init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - akh-network
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
     container_name: akh-redis
+    restart: unless-stopped
+    command: >
+      sh -c "
+        if [ -n \"$$REDIS_PASSWORD\" ]; then
+          redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\";
+        else
+          redis-server --appendonly yes;
+        fi
+      "
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG; else redis-cli ping 2>/dev/null | grep -q PONG; fi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - akh-network
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: akh-rabbitmq
+    restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - akh-network
 
 volumes:
   mysql-data:
+    name: akh-mysql-data
+  redis-data:
+    name: akh-redis-data
+  rabbitmq-data:
+    name: akh-rabbitmq-data
 
+networks:
+  akh-network:
+    name: akh-network
+    driver: bridge
