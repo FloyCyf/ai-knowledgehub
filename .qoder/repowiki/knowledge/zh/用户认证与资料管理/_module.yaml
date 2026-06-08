@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: user_service
+title: 用户认证与资料管理
+scope:
+    - user-service/
+source_files: []
+depends_on: []
+related_to:
+    - path: article_service

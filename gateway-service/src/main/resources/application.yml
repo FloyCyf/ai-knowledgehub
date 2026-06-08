@@ -29,7 +29,10 @@ spring:
           uri: lb://ranking-service
           predicates:
             - Path=/api/ranking/**
-        # ai-service 由 C 负责创建后再添加路由
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai/**
         # ============== 管理员接口走 user-service ==============
         - id: admin-routes
           uri: lb://user-service

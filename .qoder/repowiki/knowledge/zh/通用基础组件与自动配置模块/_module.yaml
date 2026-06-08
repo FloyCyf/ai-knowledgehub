@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: common_lib
+title: 通用基础组件与自动配置模块
+scope:
+    - common/
+source_files: []
+depends_on: []
+related_to: []

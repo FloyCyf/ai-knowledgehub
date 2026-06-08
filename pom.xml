@@ -17,7 +17,7 @@
         <module>article-service</module>
         <module>ranking-service</module>
         <module>gateway-service</module>
-        <!-- ai-service 由 C 负责创建后再添加 -->
+        <module>ai-service</module>
     </modules>
 
     <properties>
