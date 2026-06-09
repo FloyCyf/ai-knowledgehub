@@ -24,6 +24,16 @@
       "key": "articleId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "aiUrl",
+      "value": "http://localhost:8084",
+      "type": "string"
+    },
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
     }
   ],
   "item": [
@@ -297,6 +307,175 @@
               "raw": "{{rankingUrl}}/api/ranking/articles/{{articleId}}/publish",
               "host": ["{{rankingUrl}}"],
               "path": ["api", "ranking", "articles", "{{articleId}}", "publish"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI功能",
+      "item": [
+        {
+          "name": "AI续写(同步)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"请继续写一段关于 Redis 热榜设计的内容\"\n}"
+            },
+            "url": {
+              "raw": "{{aiUrl}}/api/ai/continue-writing",
+              "host": ["{{aiUrl}}"],
+              "path": ["api", "ai", "continue-writing"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "AI流式续写(SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{aiUrl}}/api/ai/continue-writing/stream?prompt=请继续写一段关于Redis热榜设计的内容",
+              "host": ["{{aiUrl}}"],
+              "path": ["api", "ai", "continue-writing", "stream"],
+              "query": [
+                {
+                  "key": "prompt",
+                  "value": "请继续写一段关于Redis热榜设计的内容"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取文章AI分析结果",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{aiUrl}}/api/ai/articles/{{articleId}}/analysis",
+              "host": ["{{aiUrl}}"],
+              "path": ["api", "ai", "articles", "{{articleId}}", "analysis"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "用户功能",
+      "item": [
+        {
+          "name": "用户注册",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/user/register",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "user", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "用户登录",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.token) {",
+                  "        pm.collectionVariables.set('token', 'Bearer ' + jsonData.data.token);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/user/login",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "user", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "获取个人信息",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/user/profile",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "user", "profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "用户注销",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/user/logout",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "user", "logout"]
             }
           },
           "response": []

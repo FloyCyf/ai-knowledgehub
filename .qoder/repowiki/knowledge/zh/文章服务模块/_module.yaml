@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: article_service
+title: 文章服务模块
+scope:
+    - article-service/
+source_files: []
+depends_on: []
+related_to:
+    - path: ranking_service
+    - path: user_service

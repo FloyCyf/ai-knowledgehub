@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: ranking_service
+title: 文章热度排行服务
+scope:
+    - ranking-service/
+source_files: []
+depends_on: []
+related_to:
+    - path: article_service

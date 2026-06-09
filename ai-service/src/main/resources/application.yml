@@ -1,0 +1,53 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: ai-service
+
+  # H2 内存数据库（本地开发）
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:ai_knowledgehub_ai;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+
+  # RabbitMQ
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: 1
+        max-concurrency: 5
+        prefetch: 1
+
+# Mock LLM 配置
+ai:
+  mock:
+    enabled: true
+    model-name: MockLLM-v1
+    streaming-delay-ms: 100
+    timeout-ms: 30000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+logging:
+  level:
+    com.ai.knowledgehub.ai: debug
