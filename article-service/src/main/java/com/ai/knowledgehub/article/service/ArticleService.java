@@ -1,5 +1,6 @@
 package com.ai.knowledgehub.article.service;
 
+import com.ai.knowledgehub.article.client.RankingClient;
 import com.ai.knowledgehub.article.dto.ArticleDTO;
 import com.ai.knowledgehub.article.entity.Article;
 import com.ai.knowledgehub.article.mapper.ArticleMapper;
@@ -17,7 +18,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -29,25 +32,22 @@ import java.util.Map;
 public class ArticleService {
 
     private final ArticleMapper articleMapper;
+    private final RankingClient rankingClient;
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
     @Autowired(required = false)
     private RabbitTemplate rabbitTemplate;
-    private final RankingService rankingService;
 
-    public ArticleService(ArticleMapper articleMapper, RankingService rankingService) {
+    public ArticleService(ArticleMapper articleMapper, RankingClient rankingClient) {
         this.articleMapper = articleMapper;
-        this.rankingService = rankingService;
+        this.rankingClient = rankingClient;
     }
-
-    // Redis 热榜 Key
-    private static final String HOT_RANKING_KEY = "article:hot:ranking";
 
     /**
      * 创建文章草稿
      *
      * @param articleDTO 文章数据
-     * @param authorId    作者 ID
+     * @param authorId   作者 ID
      * @return 文章 ID
      */
     @Transactional(rollbackFor = Exception.class)
@@ -105,8 +105,8 @@ public class ArticleService {
      * 发布文章
      *
      * @param articleId 文章 ID
-     * @param userId     当前用户 ID
-     * @param userRole   当前用户角色
+     * @param userId    当前用户 ID
+     * @param userRole  当前用户角色
      */
     @Transactional(rollbackFor = Exception.class)
     public void publishArticle(Long articleId, Long userId, String userRole) {
@@ -128,8 +128,8 @@ public class ArticleService {
         article.setUpdatedAt(LocalDateTime.now());
         articleMapper.updateById(article);
 
-        // 发布热度 +2
-        rankingService.increaseScore(articleId, 2);
+        // 通知 ranking-service 增加发布热度
+        rankingClient.notifyPublish(articleId);
 
         // 发送 MQ 消息
         sendArticlePublishedEvent(article);
@@ -142,7 +142,7 @@ public class ArticleService {
      *
      * @param articleId 文章 ID
      * @param userId    当前用户 ID
-     * @param userRole   当前用户角色
+     * @param userRole  当前用户角色
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteArticle(Long articleId, Long userId, String userRole) {
@@ -205,10 +205,44 @@ public class ArticleService {
         article.setViewCount(article.getViewCount() + 1);
         articleMapper.updateById(article);
 
-        // 热度 +1
-        rankingService.increaseScore(articleId, 1);
+        // 通知 ranking-service 增加阅读热度
+        rankingClient.notifyView(articleId);
 
         return convertToVO(article);
+    }
+
+    /**
+     * 获取热门文章列表（Top 10）
+     *
+     * @return 热门文章列表
+     */
+    public List<ArticleVO> getHotArticles() {
+        // 从 ranking-service 获取热点文章 ID 列表
+        List<Long> topArticleIds = rankingClient.getTopArticles();
+
+        if (topArticleIds.isEmpty()) {
+            log.info("热点文章列表为空，返回最新文章作为替代");
+            // 如果没有热点数据，返回最新的10篇文章
+            IPage<ArticleVO> latestArticles = getLatestArticles(1, 10);
+            return latestArticles.getRecords();
+        }
+
+        // 批量查询文章详情
+        List<ArticleVO> hotArticles = new ArrayList<>();
+        for (Long articleId : topArticleIds) {
+            try {
+                Article article = getArticleById(articleId);
+                // 只添加已发布且未删除的文章
+                if ("PUBLISHED".equals(article.getStatus()) && article.getDeleted() == 0) {
+                    hotArticles.add(convertToVO(article));
+                }
+            } catch (RuntimeException e) {
+                log.warn("获取热点文章详情失败, 文章ID: {}, 错误: {}", articleId, e.getMessage());
+            }
+        }
+
+        log.info("获取热门文章列表成功, 文章数量: {}", hotArticles.size());
+        return hotArticles;
     }
 
     /**
@@ -256,17 +290,21 @@ public class ArticleService {
      */
     private void sendArticlePublishedEvent(Article article) {
         if (rabbitTemplate != null) {
-            Map<String, Object> event = new HashMap<>();
-            event.put("articleId", article.getId());
-            event.put("title", article.getTitle());
-            event.put("authorId", article.getAuthorId());
-            event.put("content", article.getContent());
-            event.put("publishTime", article.getPublishedAt());
+            try {
+                Map<String, Object> event = new HashMap<>();
+                event.put("articleId", article.getId());
+                event.put("title", article.getTitle());
+                event.put("content", article.getContent());
+                event.put("authorId", article.getAuthorId());
+                event.put("publishedAt", article.getPublishedAt().toString());
 
-            rabbitTemplate.convertAndSend(MqConfig.ARTICLE_PUBLISH_EXCHANGE, "", event);
-            log.info("发送文章发布事件，文章ID: {}", article.getId());
+                rabbitTemplate.convertAndSend(MqConfig.ARTICLE_PUBLISH_EXCHANGE, "", event);
+                log.info("发送文章发布事件到 MQ，文章ID: {}", article.getId());
+            } catch (Exception e) {
+                log.warn("发送文章发布事件到 MQ 失败，文章ID: {}, 错误: {}", article.getId(), e.getMessage());
+            }
         } else {
-            log.info("RabbitMQ 未配置，跳过发送文章发布事件，文章ID: {}", article.getId());
+            log.info("RabbitMQ 未配置，跳过发送文章发布事件");
         }
     }
 

@@ -1,5 +1,6 @@
 package com.ai.knowledgehub.article.service;
 
+import com.ai.knowledgehub.article.client.RankingClient;
 import com.ai.knowledgehub.article.dto.CommentDTO;
 import com.ai.knowledgehub.article.entity.Comment;
 import com.ai.knowledgehub.article.mapper.CommentMapper;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 评论服务
@@ -26,7 +28,8 @@ public class CommentService {
 
     private final CommentMapper commentMapper;
     private final ArticleService articleService;
-    private final RankingService rankingService;
+    private final RankingClient rankingClient;
+    private final SensitiveWordService sensitiveWordService;
 
     /**
      * 创建评论
@@ -41,10 +44,19 @@ public class CommentService {
         // 验证文章是否存在
         articleService.getArticleById(articleId);
 
+        // 敏感词过滤
+        String content = commentDTO.getContent();
+        List<String> sensitiveWords = sensitiveWordService.findSensitiveWords(content);
+        
+        if (!sensitiveWords.isEmpty()) {
+            log.warn("评论包含敏感词，文章ID: {}, 用户ID: {}, 敏感词: {}", articleId, userId, sensitiveWords);
+            throw new RuntimeException("评论内容包含敏感词");
+        }
+
         Comment comment = new Comment();
         comment.setArticleId(articleId);
         comment.setUserId(userId);
-        comment.setContent(commentDTO.getContent());
+        comment.setContent(content);
         comment.setDeleted(0);
         comment.setCreatedAt(LocalDateTime.now());
 
@@ -53,8 +65,8 @@ public class CommentService {
         // 增加文章评论数
         articleService.incrementCommentCount(articleId);
 
-        // 评论热度 +3
-        rankingService.increaseScore(articleId, 3);
+        // 通知 ranking-service 增加评论热度
+        rankingClient.notifyComment(articleId);
 
         log.info("创建评论成功，评论ID: {}, 文章ID: {}, 用户ID: {}", comment.getId(), articleId, userId);
         return comment.getId();

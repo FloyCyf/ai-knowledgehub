@@ -4,20 +4,37 @@ server:
 spring:
   application:
     name: ranking-service
+  
+  # H2 数据库配置（用于启动，不需要实际使用）
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:ranking;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
 
+  # Redis 配置（可选，没有 Redis 时使用内存模式）
   data:
     redis:
-      host: localhost
-      port: 6379
-      password:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       database: 0
-      timeout: 10000ms
+      timeout: 3000ms
       lettuce:
         pool:
           max-active: 8
           max-wait: -1ms
           max-idle: 8
           min-idle: 0
+
+# 自定义配置
+ranking:
+  # 是否使用 Redis，false 则使用内存模式
+  use-redis: false
 
 logging:
   level:

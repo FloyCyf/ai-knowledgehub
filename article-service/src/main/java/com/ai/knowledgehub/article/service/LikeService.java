@@ -1,5 +1,6 @@
 package com.ai.knowledgehub.article.service;
 
+import com.ai.knowledgehub.article.client.RankingClient;
 import com.ai.knowledgehub.article.entity.ArticleLike;
 import com.ai.knowledgehub.article.mapper.LikeMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -22,7 +23,7 @@ public class LikeService {
 
     private final LikeMapper likeMapper;
     private final ArticleService articleService;
-    private final RankingService rankingService;
+    private final RankingClient rankingClient;
 
     /**
      * 点赞文章
@@ -64,8 +65,8 @@ public class LikeService {
         // 增加文章点赞数
         articleService.incrementLikeCount(articleId);
 
-        // 点赞热度 +5
-        rankingService.increaseScore(articleId, 5);
+        // 通知 ranking-service 增加点赞热度
+        rankingClient.notifyLike(articleId);
 
         log.info("点赞成功，文章ID: {}, 用户ID: {}", articleId, userId);
         return true;

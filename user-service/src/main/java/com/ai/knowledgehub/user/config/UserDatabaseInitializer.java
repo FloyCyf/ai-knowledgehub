@@ -46,7 +46,7 @@ public class UserDatabaseInitializer implements ApplicationRunner {
      */
     private void createUserTable(Connection conn) throws SQLException {
         String sql = """
-                CREATE TABLE IF NOT EXISTS `user` (
+                CREATE TABLE IF NOT EXISTS `sys_user` (
                     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '用户ID',
                     `username` VARCHAR(50) NOT NULL COMMENT '用户名',
                     `password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希值',

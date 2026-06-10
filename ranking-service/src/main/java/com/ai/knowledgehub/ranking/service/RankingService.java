@@ -1,21 +1,24 @@
 package com.ai.knowledgehub.ranking.service;
 
 import com.ai.knowledgehub.ranking.vo.HotArticleVO;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * 热榜服务
  * 
- * 使用 Redis ZSET 实现文章热度排行
+ * 支持两种模式：
+ * 1. Redis ZSET 模式（use-redis: true）
+ * 2. 内存 Map 模式（use-redis: false）
+ * 
  * Key: article:hot:ranking
  * 
  * 热度规则：
@@ -26,7 +29,6 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class RankingService {
 
     /**
@@ -59,7 +61,16 @@ public class RankingService {
      */
     private static final long TOP_N = 10;
 
-    private final StringRedisTemplate stringRedisTemplate;
+    @Value("${ranking.use-redis:false}")
+    private boolean useRedis;
+
+    @Autowired(required = false)
+    private StringRedisTemplate stringRedisTemplate;
+
+    /**
+     * 内存模式下的热度存储
+     */
+    private final Map<Long, Double> memoryHotScore = new ConcurrentHashMap<>();
 
     /**
      * 增加文章阅读热度
@@ -103,7 +114,17 @@ public class RankingService {
      * @return 热榜文章列表，按热度降序排列
      */
     public List<HotArticleVO> getTop10() {
-        // 使用 ZREVRANGE 获取 Top10（按分数降序）
+        if (useRedis && stringRedisTemplate != null) {
+            return getTop10FromRedis();
+        } else {
+            return getTop10FromMemory();
+        }
+    }
+
+    /**
+     * 从 Redis 获取热榜 Top10
+     */
+    private List<HotArticleVO> getTop10FromRedis() {
         Set<ZSetOperations.TypedTuple<String>> tuples = stringRedisTemplate.opsForZSet()
                 .reverseRangeWithScores(HOT_RANKING_KEY, 0, TOP_N - 1);
 
@@ -125,7 +146,28 @@ public class RankingService {
             }
         }
 
-        log.info("获取热榜 Top10 成功，共 {} 篇文章", result.size());
+        log.info("获取热榜 Top10（Redis 模式），共 {} 篇文章", result.size());
+        return result;
+    }
+
+    /**
+     * 从内存获取热榜 Top10
+     */
+    private List<HotArticleVO> getTop10FromMemory() {
+        if (memoryHotScore.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<HotArticleVO> result = memoryHotScore.entrySet().stream()
+                .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
+                .limit(TOP_N)
+                .map(entry -> HotArticleVO.builder()
+                        .articleId(entry.getKey())
+                        .hotScore(entry.getValue())
+                        .build())
+                .collect(Collectors.toList());
+
+        log.info("获取热榜 Top10（内存模式），共 {} 篇文章", result.size());
         return result;
     }
 
@@ -136,8 +178,12 @@ public class RankingService {
      * @return 热度分数，不存在则返回 0
      */
     public Double getArticleScore(Long articleId) {
-        Double score = stringRedisTemplate.opsForZSet().score(HOT_RANKING_KEY, articleId.toString());
-        return score != null ? score : 0.0;
+        if (useRedis && stringRedisTemplate != null) {
+            Double score = stringRedisTemplate.opsForZSet().score(HOT_RANKING_KEY, articleId.toString());
+            return score != null ? score : 0.0;
+        } else {
+            return memoryHotScore.getOrDefault(articleId, 0.0);
+        }
     }
 
     /**
@@ -148,14 +194,32 @@ public class RankingService {
      * @param action    操作类型（用于日志）
      */
     private void incrementScore(Long articleId, double score, String action) {
+        if (useRedis && stringRedisTemplate != null) {
+            incrementScoreInRedis(articleId, score, action);
+        } else {
+            incrementScoreInMemory(articleId, score, action);
+        }
+    }
+
+    /**
+     * Redis 模式：增加热度
+     */
+    private void incrementScoreInRedis(Long articleId, double score, String action) {
         String articleIdStr = articleId.toString();
-        
-        // 使用 ZINCRBY 原子性增加分数
         Double newScore = stringRedisTemplate.opsForZSet()
                 .incrementScore(HOT_RANKING_KEY, articleIdStr, score);
-        
-        log.info("文章 {} 热度更新 - 操作: {}, 增量: {}, 新分数: {}", 
+        log.info("文章 {} 热度更新（Redis）- 操作: {}, 增量: {}, 新分数: {}", 
                 articleId, action, score, newScore);
     }
 
+    /**
+     * 内存模式：增加热度
+     */
+    private void incrementScoreInMemory(Long articleId, double score, String action) {
+        Double currentScore = memoryHotScore.getOrDefault(articleId, 0.0);
+        Double newScore = currentScore + score;
+        memoryHotScore.put(articleId, newScore);
+        log.info("文章 {} 热度更新（内存）- 操作: {}, 增量: {}, 新分数: {}", 
+                articleId, action, score, newScore);
+    }
 }

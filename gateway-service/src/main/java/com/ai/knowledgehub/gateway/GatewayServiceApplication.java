@@ -15,7 +15,10 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @ComponentScan(basePackages = {
         "com.ai.knowledgehub.gateway",
-        "com.ai.knowledgehub.common"
+        "com.ai.knowledgehub.common.filter"
+}, excludeFilters = {
+        @ComponentScan.Filter(type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE, 
+                classes = {com.ai.knowledgehub.common.exception.GlobalExceptionHandler.class})
 })
 public class GatewayServiceApplication {
 

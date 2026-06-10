@@ -21,7 +21,7 @@ import java.io.Serializable;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("user")
+@TableName("sys_user")
 public class User extends BaseEntity implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -69,11 +69,6 @@ public class User extends BaseEntity implements Serializable {
      */
     public enum Role {
         USER, ADMIN;
-
-        @EnumValue
-        public String getCode() {
-            return name();
-        }
     }
 
     /**
@@ -81,10 +76,5 @@ public class User extends BaseEntity implements Serializable {
      */
     public enum Status {
         ENABLED, DISABLED;
-
-        @EnumValue
-        public String getCode() {
-            return name();
-        }
     }
 }

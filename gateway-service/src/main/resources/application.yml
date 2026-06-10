@@ -4,74 +4,75 @@ server:
 spring:
   application:
     name: gateway-service
-  profiles:
-    active: dev
 
-  # 统一数据源配置（供 Spring Cloud LoadBalancer 使用）
+  # H2 数据库配置（用于启动）
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:gateway;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
   cloud:
-    loadbalancer:
-      ribbon:
-        enabled: false
     gateway:
-      # 关闭 CORS 跨域简写配置，由 GlobalFilter 统一处理
-      # 路由见 routes 节
       routes:
-        # ============== 业务服务路由（占位，C/A 实现具体 Filter 后会继续完善） ==============
         - id: user-service
-          uri: lb://user-service
+          uri: http://localhost:8081
           predicates:
-            - Path=/api/user/**
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=1
+
         - id: article-service
-          uri: lb://article-service
+          uri: http://localhost:8082
           predicates:
             - Path=/api/articles/**
+          filters:
+            - StripPrefix=1
+
         - id: ranking-service
-          uri: lb://ranking-service
+          uri: http://localhost:8083
           predicates:
             - Path=/api/ranking/**
+          filters:
+            - StripPrefix=1
+
         - id: ai-service
-          uri: lb://ai-service
+          uri: http://localhost:8084
           predicates:
             - Path=/api/ai/**
-        # ============== 管理员接口走 user-service ==============
+          filters:
+            - StripPrefix=1
+
+        # ============== 管理员接口路由到 user-service ==============
         - id: admin-routes
-          uri: lb://user-service
+          uri: http://localhost:8081
           predicates:
             - Path=/api/admin/**
+          filters:
+            - StripPrefix=1
 
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-
-  jackson:
-    date-format: yyyy-MM-dd HH:mm:ss
-    time-zone: GMT+8
-    default-property-inclusion: non_null
-
-swagger:
-  enabled: false  # 网关自身不暴露 Swagger，只做聚合（阶段 5）
-
-logging:
-  level:
-    org.springframework.cloud.gateway: info
-    com.ai.knowledgehub: debug
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
 
 jwt:
-  secret: ${JWT_SECRET:ai-knowledgehub-default-secret-key-for-jwt-token-generation-2024-do-not-use-in-prod}
-  expiration-millis: ${JWT_EXPIRATION:86400000}
+  secret: AIKnowledgeHubSecretKey2026VeryLongSecretKeyForJWTSigning
+  expiration: 86400000  # 24 hours
 
 rate-limit:
-  enabled: true
-  default-window-seconds: 10
-  default-max-requests: 20
+  enabled: false  # 暂时关闭，因为没有 Redis
+  article-detail:
+    window-seconds: 10
+    max-requests: 20
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      show-details: when-authorized
+# 由于没有 Redis，暂时关闭限流
+spring.data.redis:
+  repositories:
+    enabled: false

@@ -1,3 +1,2 @@
 com.ai.knowledgehub.common.config.JwtAutoConfiguration
 com.ai.knowledgehub.common.config.MetaObjectHandlerAutoConfiguration
-com.ai.knowledgehub.common.swagger.SwaggerConfig

@@ -3,14 +3,16 @@ package com.ai.knowledgehub.article.controller;
 import com.ai.knowledgehub.article.dto.ArticleDTO;
 import com.ai.knowledgehub.article.service.ArticleService;
 import com.ai.knowledgehub.article.vo.ArticleVO;
+import com.ai.knowledgehub.common.exception.AuthException;
+import com.ai.knowledgehub.common.result.ApiResponse;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,16 +35,16 @@ public class ArticleController {
      * @return 文章 ID
      */
     @PostMapping("/draft")
-    public ResponseEntity<Map<String, Object>> createDraft(
+    public ApiResponse<Map<String, Object>> createDraft(
             @Valid @RequestBody ArticleDTO articleDTO,
             @RequestHeader(value = "X-User-Id", required = false) Long userId) {
         // 未登录校验
         if (userId == null) {
-            return ResponseEntity.status(401).body(errorResponse(401, "请先登录"));
+            throw AuthException.unauthorized();
         }
 
         Long articleId = articleService.createDraft(articleDTO, userId);
-        return ResponseEntity.ok(successResponse(Map.of("articleId", articleId)));
+        return ApiResponse.success(Map.of("articleId", articleId));
     }
 
     /**
@@ -55,25 +57,18 @@ public class ArticleController {
      * @return 成功响应
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateArticle(
+    public ApiResponse<Void> updateArticle(
             @PathVariable Long id,
             @Valid @RequestBody ArticleDTO articleDTO,
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
         // 未登录校验
         if (userId == null) {
-            return ResponseEntity.status(401).body(errorResponse(401, "请先登录"));
+            throw AuthException.unauthorized();
         }
 
-        try {
-            articleService.updateArticle(id, articleDTO, userId, userRole);
-            return ResponseEntity.ok(successResponse(null));
-        } catch (RuntimeException e) {
-            if (e.getMessage().contains("无权限")) {
-                return ResponseEntity.status(403).body(errorResponse(403, e.getMessage()));
-            }
-            return ResponseEntity.badRequest().body(errorResponse(400, e.getMessage()));
-        }
+        articleService.updateArticle(id, articleDTO, userId, userRole);
+        return ApiResponse.success();
     }
 
     /**
@@ -85,24 +80,17 @@ public class ArticleController {
      * @return 成功响应
      */
     @PostMapping("/{id}/publish")
-    public ResponseEntity<Map<String, Object>> publishArticle(
+    public ApiResponse<Void> publishArticle(
             @PathVariable Long id,
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
         // 未登录校验
         if (userId == null) {
-            return ResponseEntity.status(401).body(errorResponse(401, "请先登录"));
+            throw AuthException.unauthorized();
         }
 
-        try {
-            articleService.publishArticle(id, userId, userRole);
-            return ResponseEntity.ok(successResponse(null));
-        } catch (RuntimeException e) {
-            if (e.getMessage().contains("无权限")) {
-                return ResponseEntity.status(403).body(errorResponse(403, e.getMessage()));
-            }
-            return ResponseEntity.badRequest().body(errorResponse(400, e.getMessage()));
-        }
+        articleService.publishArticle(id, userId, userRole);
+        return ApiResponse.success();
     }
 
     /**
@@ -114,24 +102,17 @@ public class ArticleController {
      * @return 成功响应
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteArticle(
+    public ApiResponse<Void> deleteArticle(
             @PathVariable Long id,
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
         // 未登录校验
         if (userId == null) {
-            return ResponseEntity.status(401).body(errorResponse(401, "请先登录"));
+            throw AuthException.unauthorized();
         }
 
-        try {
-            articleService.deleteArticle(id, userId, userRole);
-            return ResponseEntity.ok(successResponse(null));
-        } catch (RuntimeException e) {
-            if (e.getMessage().contains("无权限")) {
-                return ResponseEntity.status(403).body(errorResponse(403, e.getMessage()));
-            }
-            return ResponseEntity.badRequest().body(errorResponse(400, e.getMessage()));
-        }
+        articleService.deleteArticle(id, userId, userRole);
+        return ApiResponse.success();
     }
 
     /**
@@ -142,7 +123,7 @@ public class ArticleController {
      * @return 文章列表
      */
     @GetMapping("/latest")
-    public ResponseEntity<Map<String, Object>> getLatestArticles(
+    public ApiResponse<Map<String, Object>> getLatestArticles(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         IPage<ArticleVO> articlePage = articleService.getLatestArticles(page, size);
@@ -153,7 +134,7 @@ public class ArticleController {
         data.put("page", articlePage.getCurrent());
         data.put("size", articlePage.getSize());
 
-        return ResponseEntity.ok(successResponse(data));
+        return ApiResponse.success(data);
     }
 
     /**
@@ -163,34 +144,19 @@ public class ArticleController {
      * @return 文章详情
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getArticleDetail(@PathVariable Long id) {
-        try {
-            ArticleVO article = articleService.getArticleDetail(id);
-            return ResponseEntity.ok(successResponse(article));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(404).body(errorResponse(404, e.getMessage()));
-        }
+    public ApiResponse<ArticleVO> getArticleDetail(@PathVariable Long id) {     
+        ArticleVO article = articleService.getArticleDetail(id);
+        return ApiResponse.success(article);
     }
 
     /**
-     * 构建成功响应
+     * 获取热门文章列表（Top 10）
+     *
+     * @return 热门文章列表
      */
-    private Map<String, Object> successResponse(Object data) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 200);
-        response.put("message", "success");
-        response.put("data", data);
-        return response;
-    }
-
-    /**
-     * 构建错误响应
-     */
-    private Map<String, Object> errorResponse(int code, String message) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", code);
-        response.put("message", message);
-        response.put("data", null);
-        return response;
+    @GetMapping("/hot")
+    public ApiResponse<List<ArticleVO>> getHotArticles() {
+        List<ArticleVO> hotArticles = articleService.getHotArticles();
+        return ApiResponse.success(hotArticles);
     }
 }
