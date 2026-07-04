@@ -60,3 +60,9 @@ logging:
   level:
     com.ai.knowledgehub.article: debug
     org.springframework.amqp: debug
+
+article:
+  ai-consumer:
+    # 默认由 ai-service 消费文章发布事件，避免 article-service 与 ai-service 抢同一队列。
+    enabled: false
+

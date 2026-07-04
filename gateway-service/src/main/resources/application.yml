@@ -22,38 +22,28 @@ spring:
         - id: user-service
           uri: http://localhost:8081
           predicates:
-            - Path=/api/users/**
-          filters:
-            - StripPrefix=1
+            - Path=/api/user/**
 
         - id: article-service
           uri: http://localhost:8082
           predicates:
             - Path=/api/articles/**
-          filters:
-            - StripPrefix=1
 
         - id: ranking-service
           uri: http://localhost:8083
           predicates:
             - Path=/api/ranking/**
-          filters:
-            - StripPrefix=1
 
         - id: ai-service
           uri: http://localhost:8084
           predicates:
             - Path=/api/ai/**
-          filters:
-            - StripPrefix=1
 
         # ============== 管理员接口路由到 user-service ==============
         - id: admin-routes
           uri: http://localhost:8081
           predicates:
             - Path=/api/admin/**
-          filters:
-            - StripPrefix=1
 
       globalcors:
         cors-configurations:
