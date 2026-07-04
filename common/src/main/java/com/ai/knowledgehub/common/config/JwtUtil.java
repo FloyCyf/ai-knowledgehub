@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * JWT 工具类
@@ -104,6 +105,7 @@ public class JwtUtil {
                 .claims(claims)
                 .subject(username)
                 .issuer(properties.getIssuer())
+                .id(UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSecretKey(properties.getSecret()))

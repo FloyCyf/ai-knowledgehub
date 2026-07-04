@@ -3,7 +3,8 @@ package com.ai.knowledgehub.gateway.filter;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -18,17 +19,18 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-@Slf4j
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     @Value("${jwt.secret}")
     private String jwtSecret;
 
     // 不需要认证的路径
     private static final List<String> WHITE_LIST = List.of(
-            "/api/users/register",
-            "/api/users/login",
+            "/api/user/register",
+            "/api/user/login",
             "/api/articles/latest",
             "/api/ranking/top10",
             "/actuator"
