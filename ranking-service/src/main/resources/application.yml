@@ -34,7 +34,7 @@ spring:
 # 自定义配置
 ranking:
   # 是否使用 Redis，false 则使用内存模式
-  use-redis: false
+  use-redis: true
 
 logging:
   level:
