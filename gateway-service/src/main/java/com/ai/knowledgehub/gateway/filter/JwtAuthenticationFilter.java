@@ -1,5 +1,10 @@
 package com.ai.knowledgehub.gateway.filter;
 
+import com.ai.knowledgehub.common.config.JwtUtil;
+import com.ai.knowledgehub.common.constant.HeaderConstants;
+import com.ai.knowledgehub.common.result.ApiResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -9,7 +14,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -19,66 +28,107 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * Gateway 统一 JWT 鉴权过滤器。
+ * <p>
+ * 放行注册、登录、健康检查和公开查询接口；其他接口统一解析 JWT，并覆盖客户端
+ * 伪造的用户上下文请求头后再转发给下游服务。
+ * </p>
+ */
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
+    private static final List<String> PUBLIC_PREFIXES = List.of(
+            "/actuator",
+            "/h2-console",
+            "/doc.html",
+            "/v3/api-docs"
+    );
+
+    private static final String ADMIN_PREFIX = "/api/admin/";
+
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    // 不需要认证的路径
-    private static final List<String> WHITE_LIST = List.of(
-            "/api/user/register",
-            "/api/user/login",
-            "/api/articles/latest",
-            "/api/ranking/top10",
-            "/actuator"
-    );
+    private final ObjectMapper objectMapper;
+
+    public JwtAuthenticationFilter(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String path = exchange.getRequest().getURI().getPath();
-        
-        // 白名单直接放行
-        if (isWhiteListed(path)) {
+        ServerHttpRequest request = exchange.getRequest();
+        String path = request.getURI().getPath();
+
+        if (isPublicEndpoint(request)) {
             return chain.filter(exchange);
         }
 
-        // 获取 Token
-        String token = getTokenFromRequest(exchange.getRequest());
-        
-        if (token == null) {
+        String token = getTokenFromRequest(request);
+        if (token == null || token.isBlank()) {
             log.warn("请求路径 {} 缺少 Token", path);
-            return unauthorized(exchange, "缺少认证 Token");
+            return writeJson(exchange, HttpStatus.UNAUTHORIZED, ApiResponse.fail(401, "缺少认证 Token"));
         }
 
         try {
-            // 验证 Token
             Claims claims = validateToken(token);
-            
-            // 将用户信息传递给下游服务
-            ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
-                    .header("X-User-Id", claims.getSubject())
-                    .header("X-User-Role", claims.get("role", String.class))
+            Long userId = JwtUtil.getUserId(claims);
+            String username = JwtUtil.getUsername(claims);
+            String role = JwtUtil.getRole(claims);
+
+            if (userId == null || role == null || role.isBlank()) {
+                return writeJson(exchange, HttpStatus.UNAUTHORIZED, ApiResponse.fail(401, "Token 缺少用户上下文"));
+            }
+            if (path.startsWith(ADMIN_PREFIX) && !HeaderConstants.ROLE_ADMIN.equals(role)) {
+                return writeJson(exchange, HttpStatus.FORBIDDEN, ApiResponse.fail(403, "无权限访问"));
+            }
+
+            ServerHttpRequest modifiedRequest = request.mutate()
+                    .headers(headers -> {
+                        headers.remove(HeaderConstants.X_USER_ID);
+                        headers.remove(HeaderConstants.X_USER_ROLE);
+                        headers.remove(HeaderConstants.X_USER_NAME);
+                        headers.set(HeaderConstants.X_USER_ID, String.valueOf(userId));
+                        headers.set(HeaderConstants.X_USER_ROLE, role);
+                        if (username != null && !username.isBlank()) {
+                            headers.set(HeaderConstants.X_USER_NAME, username);
+                        }
+                    })
                     .build();
-            
+
             return chain.filter(exchange.mutate().request(modifiedRequest).build());
-            
         } catch (Exception e) {
-            log.error("Token 验证失败: {}", e.getMessage());
-            return unauthorized(exchange, "Token 无效或已过期");
+            log.warn("Token 验证失败: {}", e.getMessage());
+            return writeJson(exchange, HttpStatus.UNAUTHORIZED, ApiResponse.fail(401, "Token 无效或已过期"));
         }
     }
 
-    private boolean isWhiteListed(String path) {
-        return WHITE_LIST.stream().anyMatch(path::startsWith);
+    private boolean isPublicEndpoint(ServerHttpRequest request) {
+        String path = request.getURI().getPath();
+        HttpMethod method = request.getMethod();
+        if (PUBLIC_PREFIXES.stream().anyMatch(path::startsWith)) {
+            return true;
+        }
+        if (HttpMethod.POST.equals(method)
+                && ("/api/user/register".equals(path) || "/api/user/login".equals(path))) {
+            return true;
+        }
+        if (HttpMethod.GET.equals(method)
+                && ("/api/articles/latest".equals(path)
+                || path.matches("^/api/articles/[^/]+$")
+                || "/api/ranking/top10".equals(path))) {
+            return true;
+        }
+        return false;
     }
 
     private String getTokenFromRequest(ServerHttpRequest request) {
-        String bearerToken = request.getHeaders().getFirst("Authorization");
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
+        String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (bearerToken != null && bearerToken.startsWith(HeaderConstants.BEARER)) {
+            return bearerToken.substring(HeaderConstants.BEARER.length());
         }
         return null;
     }
@@ -92,17 +142,21 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 .getPayload();
     }
 
-    private Mono<Void> unauthorized(ServerWebExchange exchange, String message) {
-        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-        exchange.getResponse().getHeaders().add("Content-Type", "application/json");
-        String body = String.format("{\"code\":401,\"message\":\"%s\"}", message);
-        return exchange.getResponse().writeWith(
-                Mono.just(exchange.getResponse().bufferFactory().wrap(body.getBytes()))
-        );
+    private Mono<Void> writeJson(ServerWebExchange exchange, HttpStatus status, ApiResponse<?> response) {
+        exchange.getResponse().setStatusCode(status);
+        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        byte[] bytes;
+        try {
+            bytes = objectMapper.writeValueAsBytes(response);
+        } catch (JsonProcessingException e) {
+            bytes = "{\"code\":500,\"message\":\"响应序列化失败\",\"data\":null}".getBytes(StandardCharsets.UTF_8);
+        }
+        DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);
+        return exchange.getResponse().writeWith(Mono.just(buffer));
     }
 
     @Override
     public int getOrder() {
-        return -100; // 优先级高，先执行
+        return -100;
     }
 }

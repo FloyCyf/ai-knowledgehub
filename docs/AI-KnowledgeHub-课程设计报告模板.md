@@ -1376,9 +1376,9 @@ postman/AI-KnowledgeHub.postman_collection.json
 
 | 问题 | 原因 | 修复方案 | 状态 |
 | --- | --- | --- | --- |
-| Maven 测试编译失败 | common 缺少 JUnit 测试依赖 | 补充 `spring-boot-starter-test` | 待修复 |
-| Gateway 路由不一致 | `/api/user` 与 `/api/users` 不一致 | 统一路由配置 | 待修复 |
-| Gateway StripPrefix 导致 404 | 下游服务保留 `/api` 前缀 | 移除 StripPrefix 或调整下游路径 | 待修复 |
+| Maven 测试编译失败 | common 缺少 JUnit 测试依赖 | 补充 `spring-boot-starter-test` | 已修复 |
+| Gateway 路由不一致 | 用户接口曾存在新旧路径不一致 | 统一为 `/api/user/**` | 已修复 |
+| Gateway StripPrefix 导致 404 | 下游服务保留 `/api` 前缀 | 移除 `StripPrefix`，保留完整路径转发 | 已修复 |
 | 热榜默认内存模式 | `ranking.use-redis=false` | 改为 Redis 模式 | 待修复 |
 
 ---

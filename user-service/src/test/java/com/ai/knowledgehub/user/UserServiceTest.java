@@ -195,8 +195,7 @@ class UserServiceTest {
         UserVO vo = userService.getProfile(userId);
         assertNotNull(vo);
         assertEquals("frank", vo.getUsername());
-        assertNull(vo.getStatus(), "VO 不应包含 status 字段（被 @JsonInclude 过滤）或包含 ENABLED");
-        // 注：UserVO 含 status 字段，但 getStatus 可能为 null
+        assertEquals("ENABLED", vo.getStatus());
     }
 
     @Test
