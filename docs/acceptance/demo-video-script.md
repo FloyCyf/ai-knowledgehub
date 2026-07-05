@@ -41,7 +41,7 @@ powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1
 
 # (d) 等服务起来后,确认五口在听
 netstat -ano | Select-String ":808[0-4].*LISTENING"
-curl http://localhost:8080/actuator/health
+curl.exe http://localhost:8080/actuator/health
 ```
 
 **期望**:`docker ps` 三行均 `Up ... (healthy)`,5 个端口全 LISTENING,`/actuator/health` 返回 `{"status":"UP"}`。
@@ -65,7 +65,7 @@ netstat -ano | Select-String ":808[0-4].*LISTENING"
 ```
 
 ```powershell
-curl http://localhost:8080/actuator/health
+curl.exe http://localhost:8080/actuator/health
 ```
 
 **截图点 S1**:
@@ -150,37 +150,37 @@ chcp 65001
 # (1) 自取一个新用户,不依赖左窗口的 session
 $ts   = Get-Date -Format "HHmmss"
 $body = "{`"username`":`"demo_bump_$ts`",`"password`":`"123456`"}"
-$null = curl -s -X POST -H "Content-Type: application/json" -d $body `
+$null = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
    "http://localhost:8080/api/user/register"
 
-$login = curl -s -X POST -H "Content-Type: application/json" -d $body `
+$login = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
    "http://localhost:8080/api/user/login"
 $tok = ($login | ConvertFrom-Json).data.token
 Write-Host ("bump token length = " + $tok.Length)
 
 # (2) 自创建 3 篇短文并发布,这样 Redis ZSET 自动得到 +2 热度
 1..3 | ForEach-Object {
-    $draft = curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
+    $draft = curl.exe -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
        -d '{"title":"ranking demo article","content":"ranking demo content"}' `
        "http://localhost:8080/api/articles/draft"
     $aid = ($draft | ConvertFrom-Json).data.articleId
-    $null = curl -s -X POST -H "Authorization: Bearer $tok" `
+    $null = curl.exe -s -X POST -H "Authorization: Bearer $tok" `
        ("http://localhost:8080/api/articles/" + $aid + "/publish")
     Write-Host ("article " + $aid + " published")
 }
 
 # (3) 给第一篇点 2 个赞,加 1 条评论,加 1 次浏览
 $first = 1   # 接受"最近创建的是某个 ID"的事实,直接用 $latest
-$latest = curl -s "http://localhost:8080/api/articles/latest"
+$latest = curl.exe -s "http://localhost:8080/api/articles/latest"
 $aid = ($latest | ConvertFrom-Json).data.list[0].id
 1..2 | ForEach-Object {
-    $null = curl -s -X POST -H "Authorization: Bearer $tok" `
+    $null = curl.exe -s -X POST -H "Authorization: Bearer $tok" `
        ("http://localhost:8080/api/articles/" + $aid + "/like")
 }
-$null = curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
+$null = curl.exe -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
    -d '{"content":"good write-up"}' `
    ("http://localhost:8080/api/articles/" + $aid + "/comments")
-$null = curl -s -X POST -H "Authorization: Bearer $tok" `
+$null = curl.exe -s -X POST -H "Authorization: Bearer $tok" `
    ("http://localhost:8080/api/articles/" + $aid + "/view")
 Write-Host "score bumped"
 ```
@@ -204,7 +204,7 @@ Write-Host "score bumped"
 
 ```powershell
 # (1) HTTP 接口读 top10
-$top = curl -s "http://localhost:8080/api/ranking/top10"
+$top = curl.exe -s "http://localhost:8080/api/ranking/top10"
 $topObj  = $top | ConvertFrom-Json
 $top | ConvertFrom-Json | ConvertTo-Json -Depth 5
 
@@ -277,9 +277,9 @@ docker exec akh-mysql mysql -uroot -p${MYSQL_ROOT_PASSWORD:-} user_db -e "
   SELECT id, username, role FROM user WHERE role='ADMIN';
 " 2>&1 | Out-File "last-h2-promote.txt"
 
-# (A2) 登录这个 admin 用户拿 admin token(用 curl 避免 PS hashtable 坑)
+# (A2) 登录这个 admin 用户拿 admin token(用 curl.exe 避免 PS hashtable 坑)
 $adminBody = '{"username":"a_accept_20260705190800","password":"123456"}'
-$adminResp = curl -s -X POST -H "Content-Type: application/json" -d $adminBody `
+$adminResp = curl.exe -s -X POST -H "Content-Type: application/json" -d $adminBody `
    "http://localhost:8080/api/user/login"
 $adminToken = ($adminResp | ConvertFrom-Json).data.token
 Write-Host ("admin token length = " + $adminToken.Length)
@@ -329,13 +329,13 @@ Acceptance finished. Runtime record: docs\acceptance\runtime\last-gateway-accept
 # 重新拿一个普通用户 token
 $body = '{"username":"a_accept_' + (Get-Date -Format "HHmmss") + '","password":"123456"}'
 $regBody = $body   # 注册一次,等下也用
-$login   = curl -s -X POST -H "Content-Type: application/json" -d $body `
+$login   = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
    "http://localhost:8080/api/user/login"
 $tok = ($login | ConvertFrom-Json).data.token
 Write-Host ("token length = " + $tok.Length)
 
 # (1) 同步续写 — 一次性返回完整文本
-$sync = curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
+$sync = curl.exe -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
    -d '{"prompt":"请写一段 Redis ZSET 的优势"}' `
    "http://localhost:8080/api/continue-writing"
 # ↑ 注意:这里 URL 应该是 /api/ai/continue-writing,见下方修正
@@ -345,7 +345,7 @@ $sync = curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: applic
 
 ```powershell
 # 同步:POST /api/ai/continue-writing
-$sync = curl -s -X POST `
+$sync = curl.exe -s -X POST `
    -H "Authorization: Bearer $tok" `
    -H "Content-Type: application/json" `
    -d '{"prompt":"请写一段 Redis ZSET 的优势"}' `
@@ -354,7 +354,7 @@ Write-Host $sync
 
 # 流式:GET /api/ai/continue-writing/stream?prompt=...
 $promptUtf8 = [System.Web.HttpUtility]::UrlEncode("请写一段Redis ZSET的优势")
-curl -sN -H ("Authorization: Bearer " + $tok) `
+curl.exe -sN -H ("Authorization: Bearer " + $tok) `
    ("http://localhost:8080/api/ai/continue-writing/stream?prompt=" + $promptUtf8)
 ```
 
@@ -395,6 +395,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 | 上一个 PS session 的 `$login` / `$token` 残留导致错误码 | **新开 PowerShell 窗口**,完全干净 session,只跑本脚本命令 |
 | `MYSQL_ROOT_PASSWORD` 变量不存在 | `.env.example` 默认空,所以 `${MYSQL_ROOT_PASSWORD:-}` 会用空串连接,直接 `docker exec akh-mysql mysql -uroot user_db` 也行 |
 | **acceptance-gateway.ps1 一旦启动会顺次跑完所有 9 段、无法中断** | OBS 起双 PowerShell 窗口并排录制:**左窗口跑 `acceptance-gateway.ps1`、右窗口做手动操作**,两个窗口并行。具体在分镜 3 / 4 / 5 都有体现 |
+| **`curl` 在 PowerShell 5.1 里是 `Invoke-WebRequest` 的别名** | 文档里所有 `curl` 实际指 `curl.exe`(Windows 10 1803+ 自带)。`curl.exe -H "..."` 会被 alias 解成 `Invoke-WebRequest -Headers`(期望 hashtable),从而报"无法将 System.String 转换为 IDictionary"。**所有 HTTP 调用显式写 `curl.exe`** |
 
 ---
 
@@ -452,11 +453,11 @@ redis-cli -h localhost FLUSHDB
 ```
 [ ] docker ps 三行 healthy
 [ ] 5 个 Java 端口 LISTENING
-[ ] curl /actuator/health 200
+[ ] curl.exe /actuator/health 200
 [ ] acceptance-gateway.ps1(不带 -AdminToken)13 个 PASS,1 个 SKIP
 [ ] acceptance-gateway.ps1 -AdminToken <token> 全 17 个 PASS,无 SKIP
 [ ] redis-cli ZREVRANGE article:hot:ranking 0 9 WITHSCORES 有输出
-[ ] curl /api/ai/continue-writing/stream?prompt=... 出现至少 3 个 data: 帧
+[ ] curl.exe /api/ai/continue-writing/stream?prompt=... 出现至少 3 个 data: 帧
 [ ] OBS 场景已切到 PowerShell 终端
 [ ] 输出窗口最大化和 UTF-8(chcp 65001)
 [ ] 音频设备 OK
