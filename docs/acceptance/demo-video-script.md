@@ -20,6 +20,8 @@
 | 3:55 - 4:10 | 7 | 收尾:关停服务 + 架构亮点口播 | 手动 |
 
 > 本脚本采用"自动化脚本触发 + 关键证据手动复现"的混合格式。自动化保证链接全打通、不漏步;手动保证最直观的证据(Redis ZSET、429、逐字 SSE)能被老师看清楚。
+>
+> **录屏工程说明**:`acceptance-gateway.ps1` 一旦启动会顺次跑完所有 9 段(line 127-254),期间没有 stop-here 钩子。本脚本固定采用 **OBS 双 PowerShell 窗口并排录制**:左窗口跑脚本,右窗口做手动操作;两个窗口并行执行,OBS 一镜全收,左右画面同步呈现给老师。详见 `§3.8`。
 
 ---
 
@@ -118,9 +120,11 @@ powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 
 **目的**:题目三核心架构点 — "文章发布 → MQ Fanout → 多下游 AI 处理"。
 
-**操作前半 — 沿用 acceptance-gateway.ps1 的继续输出**:
+**⚠ 双窗口并排**:本分镜的"前半"在 OBS 左窗口(跑 acceptance),"后半"在 OBS 右窗口(手动涨分),两个窗口并行执行。
 
-脚本自动接着跑(line 172-214):
+#### 左窗口(录像中持续可见的脚本终端)
+
+`acceptance-gateway.ps1` 继续自动跑(line 172-214):
 
 ```
 ==> Article route through gateway
@@ -136,23 +140,48 @@ powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 [PASS] ai article analysis -> HTTP 200
 ```
 
-**操作后半 — 手动涨分,让 Redis ZSET 多几条数据**(脚本不调 like/comment/view,要手动补):
+> 录取时这一段约 6-8 秒。Acceptance 会在第 13 个 [PASS] 后继续跑 Rate limit check([SKIP]),可直接 Ctrl+C 中止,JSON 已落地。
+
+#### 右窗口(同时进行的手动操作)
 
 ```powershell
-# 注:$articleId 由 acceptance-gateway.ps1 已经创建(从脚本 stdout 抄到 PS session 即可)
-$articleId = <从 acceptance 终端抄下的 articleId>
-$tok = <从 acceptance 终端抄下的登录 token>
+chcp 65001
 
-# 一次发表两次赞、加一条评论、加一次浏览
-1..2 | ForEach-Object {
-    curl -s -o $null -X POST -H "Authorization: Bearer $tok" `
-       ("http://localhost:8080/api/articles/" + $articleId + "/like")
+# (1) 自取一个新用户,不依赖左窗口的 session
+$ts   = Get-Date -Format "HHmmss"
+$body = "{`"username`":`"demo_bump_$ts`",`"password`":`"123456`"}"
+$null = curl -s -X POST -H "Content-Type: application/json" -d $body `
+   "http://localhost:8080/api/user/register"
+
+$login = curl -s -X POST -H "Content-Type: application/json" -d $body `
+   "http://localhost:8080/api/user/login"
+$tok = ($login | ConvertFrom-Json).data.token
+Write-Host ("bump token length = " + $tok.Length)
+
+# (2) 自创建 3 篇短文并发布,这样 Redis ZSET 自动得到 +2 热度
+1..3 | ForEach-Object {
+    $draft = curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
+       -d '{"title":"ranking demo article","content":"ranking demo content"}' `
+       "http://localhost:8080/api/articles/draft"
+    $aid = ($draft | ConvertFrom-Json).data.articleId
+    $null = curl -s -X POST -H "Authorization: Bearer $tok" `
+       ("http://localhost:8080/api/articles/" + $aid + "/publish")
+    Write-Host ("article " + $aid + " published")
 }
-curl -s -o $null -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
+
+# (3) 给第一篇点 2 个赞,加 1 条评论,加 1 次浏览
+$first = 1   # 接受"最近创建的是某个 ID"的事实,直接用 $latest
+$latest = curl -s "http://localhost:8080/api/articles/latest"
+$aid = ($latest | ConvertFrom-Json).data.list[0].id
+1..2 | ForEach-Object {
+    $null = curl -s -X POST -H "Authorization: Bearer $tok" `
+       ("http://localhost:8080/api/articles/" + $aid + "/like")
+}
+$null = curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
    -d '{"content":"good write-up"}' `
-   ("http://localhost:8080/api/articles/" + $articleId + "/comments")
-curl -s -o $null -X POST -H "Authorization: Bearer $tok" `
-   ("http://localhost:8080/api/articles/" + $articleId + "/view")
+   ("http://localhost:8080/api/articles/" + $aid + "/comments")
+$null = curl -s -X POST -H "Authorization: Bearer $tok" `
+   ("http://localhost:8080/api/articles/" + $aid + "/view")
 Write-Host "score bumped"
 ```
 
@@ -204,6 +233,34 @@ if ($topObj.data.total -eq $card) { "MATCH (Redis ZSET 是热榜唯一数据源)
 **口播稿**:**"现在打开 redis-cli 直接打 `article:hot:ranking` 这个 key:`TYPE` 是 `zset`,`ZCARD` 等于 N,`ZREVRANGE` 把所有 articleId 和分数倒序列出来 — 这是 Redis 内部的真实持久化数据。HTTP 接口的 `data.total` 与 `ZCARD` 完全相等,说明我们**没有写两套数据**,Redis ZSET 就是热榜的唯一数据源。每篇文章的 view +1、publish +2、comment +3、like +5 通过 `ZINCRBY` 写进来,Top10 通过 `ZREVRANGE 0 9 WITHSCORES` 拿出去,这就是 Redis ZSET 的标准用法。"**
 
 > 文字证据同时落到 `docs/acceptance/ranking/b-redis-zset-evidence.txt`,本分镜与该 txt 一一对应。
+
+### 3.1 双窗口 OBS 配置指引
+
+```
++-------------------------------------------+-------------------------------------------+
+| OBS 场景 1:PowerShell-A(左 50%)          | OBS 场景 1:PowerShell-B(右 50%)          |
+| (跑 acceptance-gateway.ps1)               | (手动 redis-cli / curl)                   |
+|                                           |                                           |
+| chcp 65001                                | chcp 65001                                |
+| powershell -ExecutionPolicy Bypass \      | $ts = Get-Date -Format "HHmmss"           |
+|   -File scripts\acceptance-gateway.ps1    | $body = "{...}"                            |
+|                                           | $tok = curl ...                          |
+| ==> Gateway health                        |   ...                                     |
+| [PASS] gateway health -> HTTP 200         |                                           |
+| [PASS] register -> HTTP 200               |                                           |
+| ...                                       |                                           |
+| Acceptance finished.                      |                                           |
++-------------------------------------------+-------------------------------------------+
+                 OBS 1080p30 一次性录完全部 5 分钟
+```
+
+**OBS 操作要点**:
+- 新建"Display Capture"或"Window Capture" → 选 PowerShell 窗口
+- 调整"Position + Size"把第一个窗口放左半屏、第二个窗口放右半屏
+- 添加"Text (GDI+)"图层覆盖底部,展示当前分镜编号和口播要点
+- 录制时按"开始录制" → 中间任何时刻都不要切换窗口或切桌面(OBS 中止)
+
+**Window Capture 的兼容性**:PowerShell 5.1 默认窗口标题是 `Administrator: Windows PowerShell`,便于 OBS 锁定窗口。Windows Terminal 标题更短(推荐)。
 
 ---
 
@@ -269,21 +326,25 @@ Acceptance finished. Runtime record: docs\acceptance\runtime\last-gateway-accept
 **操作 — 全手动 curl**,因为 acceptance-gateway.ps1 里面 SSE 是脚本执行看不到"逐字"效果的:
 
 ```powershell
-# 重新拿一个普通用户 token(沿用 A 脚本里的时间戳用户名习惯,避免冲突)
-$ts  = Get-Date -Format "HHmmss"
-$body = "{`"username`":`"a_accept_$ts`",`"password`":`"123456`"}"
-
-# 先注册(若已存在会 409,忽略即可)
-$null = curl -s -X POST -H "Content-Type: application/json" -d $body `
-   "http://localhost:8080/api/user/register"
-
-# 登录
-$login = curl -s -X POST -H "Content-Type: application/json" -d $body `
+# 重新拿一个普通用户 token
+$body = '{"username":"a_accept_' + (Get-Date -Format "HHmmss") + '","password":"123456"}'
+$regBody = $body   # 注册一次,等下也用
+$login   = curl -s -X POST -H "Content-Type: application/json" -d $body `
    "http://localhost:8080/api/user/login"
 $tok = ($login | ConvertFrom-Json).data.token
 Write-Host ("token length = " + $tok.Length)
 
-# (1) 同步续写 — POST /api/ai/continue-writing
+# (1) 同步续写 — 一次性返回完整文本
+$sync = curl -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
+   -d '{"prompt":"请写一段 Redis ZSET 的优势"}' `
+   "http://localhost:8080/api/continue-writing"
+# ↑ 注意:这里 URL 应该是 /api/ai/continue-writing,见下方修正
+```
+
+> 上面的 URL 是笔误,正确命令如下:
+
+```powershell
+# 同步:POST /api/ai/continue-writing
 $sync = curl -s -X POST `
    -H "Authorization: Bearer $tok" `
    -H "Content-Type: application/json" `
@@ -291,7 +352,7 @@ $sync = curl -s -X POST `
    "http://localhost:8080/api/ai/continue-writing"
 Write-Host $sync
 
-# (2) 流式续写 — GET /api/ai/continue-writing/stream?prompt=...
+# 流式:GET /api/ai/continue-writing/stream?prompt=...
 $promptUtf8 = [System.Web.HttpUtility]::UrlEncode("请写一段Redis ZSET的优势")
 curl -sN -H ("Authorization: Bearer " + $tok) `
    ("http://localhost:8080/api/ai/continue-writing/stream?prompt=" + $promptUtf8)
@@ -333,6 +394,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 | articleId 涨到 7、8、9 演示草稿时拿不到 1 | 接受这个事实,用最新返回的 `data.articleId` 即可,不影响演示连续性 |
 | 上一个 PS session 的 `$login` / `$token` 残留导致错误码 | **新开 PowerShell 窗口**,完全干净 session,只跑本脚本命令 |
 | `MYSQL_ROOT_PASSWORD` 变量不存在 | `.env.example` 默认空,所以 `${MYSQL_ROOT_PASSWORD:-}` 会用空串连接,直接 `docker exec akh-mysql mysql -uroot user_db` 也行 |
+| **acceptance-gateway.ps1 一旦启动会顺次跑完所有 9 段、无法中断** | OBS 起双 PowerShell 窗口并排录制:**左窗口跑 `acceptance-gateway.ps1`、右窗口做手动操作**,两个窗口并行。具体在分镜 3 / 4 / 5 都有体现 |
 
 ---
 
