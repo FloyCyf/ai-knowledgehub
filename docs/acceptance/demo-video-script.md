@@ -148,15 +148,15 @@ powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 chcp 65001
 
 # (1) 自取一个新用户,不依赖左窗口的 session
-#     注意:PS 5.1 不要用手工拼 JSON 反引号,必须用 ConvertTo-Json -Compress
+#     PS 5.1:单引号拼接字符串,不要 ConvertTo-Json 也不要反引号转义
 $ts   = Get-Date -Format "HHmmss"
-$body = @{username="demo_bump_$ts";password="123456"} | ConvertTo-Json -Compress
-$null = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
-   "http://localhost:8080/api/user/register"
-
-$login = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
+$uname = "demo_bump_$ts"
+$body = '{"username":"' + $uname + '","password":"123456"}'
+curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
+   "http://localhost:8080/api/user/register" | Out-Null
+$loginResp = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
    "http://localhost:8080/api/user/login"
-$tok = ($login | ConvertFrom-Json).data.token
+$tok = ($loginResp | ConvertFrom-Json).data.token
 Write-Host ("bump token length = " + $tok.Length)
 
 # (2) 自创建 3 篇短文并发布,这样 Redis ZSET 自动得到 +2 热度
@@ -397,7 +397,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 | `MYSQL_ROOT_PASSWORD` 变量不存在 | `.env.example` 默认空,所以 `${MYSQL_ROOT_PASSWORD:-}` 会用空串连接,直接 `docker exec akh-mysql mysql -uroot user_db` 也行 |
 | **acceptance-gateway.ps1 一旦启动会顺次跑完所有 9 段、无法中断** | OBS 起双 PowerShell 窗口并排录制:**左窗口跑 `acceptance-gateway.ps1`、右窗口做手动操作**,两个窗口并行。具体在分镜 3 / 4 / 5 都有体现 |
 | **`curl` 在 PowerShell 5.1 里是 `Invoke-WebRequest` 的别名** | 文档里所有 `curl` 实际指 `curl.exe`(Windows 10 1803+ 自带)。`curl -H "..."`(无 .exe 后缀)会被 alias 解成 `Invoke-WebRequest -Headers`(期望 hashtable),从而报"无法将 System.String 转换为 IDictionary"。**所有 HTTP 调用显式写 `curl.exe`** |
-| **PS 5.1 反引号 JSON `{\`"key\`":\`"val\`"}` 会产生非法字节** | PS 5.1 预解析多行续行时反引号+双引号转义被 tokenizer 错位,实际发出的 JSON 首字符变成 `u` 或其他非法字节引发后端 500(Jackson `JsonParseException`)。**凡是 JSON body 含 `$变量` 插值,统一用 `@{key="val"} \| ConvertTo-Json -Compress`**。纯常数字符串 JSON(无变量插值)用单引号 `'{"key":"val"}'` 仍然安全 |
+| **PS 5.1 反引号 JSON 和 `ConvertTo-Json` 输出传给 `curl.exe -d` 都可能引入非法字节** | 反引号转义被 tokenizer 错位;`ConvertTo-Json -Compress` 输出在传给外部命令时 PS 5.1 可能附加 BOM/编码。**凡是 JSON body 含 `$变量` 插值,统一用单引号字符串拼接**: `'{"key":"' + $var + '"}'`。纯常量 JSON 用单引号 `'{"key":"val"}'` 仍然安全 |
 
 ---
 
