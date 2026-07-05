@@ -148,8 +148,9 @@ powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 chcp 65001
 
 # (1) 自取一个新用户,不依赖左窗口的 session
+#     注意:PS 5.1 不要用手工拼 JSON 反引号,必须用 ConvertTo-Json -Compress
 $ts   = Get-Date -Format "HHmmss"
-$body = "{`"username`":`"demo_bump_$ts`",`"password`":`"123456`"}"
+$body = @{username="demo_bump_$ts";password="123456"} | ConvertTo-Json -Compress
 $null = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
    "http://localhost:8080/api/user/register"
 
@@ -395,7 +396,8 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 | 上一个 PS session 的 `$login` / `$token` 残留导致错误码 | **新开 PowerShell 窗口**,完全干净 session,只跑本脚本命令 |
 | `MYSQL_ROOT_PASSWORD` 变量不存在 | `.env.example` 默认空,所以 `${MYSQL_ROOT_PASSWORD:-}` 会用空串连接,直接 `docker exec akh-mysql mysql -uroot user_db` 也行 |
 | **acceptance-gateway.ps1 一旦启动会顺次跑完所有 9 段、无法中断** | OBS 起双 PowerShell 窗口并排录制:**左窗口跑 `acceptance-gateway.ps1`、右窗口做手动操作**,两个窗口并行。具体在分镜 3 / 4 / 5 都有体现 |
-| **`curl` 在 PowerShell 5.1 里是 `Invoke-WebRequest` 的别名** | 文档里所有 `curl` 实际指 `curl.exe`(Windows 10 1803+ 自带)。`curl.exe -H "..."` 会被 alias 解成 `Invoke-WebRequest -Headers`(期望 hashtable),从而报"无法将 System.String 转换为 IDictionary"。**所有 HTTP 调用显式写 `curl.exe`** |
+| **`curl` 在 PowerShell 5.1 里是 `Invoke-WebRequest` 的别名** | 文档里所有 `curl` 实际指 `curl.exe`(Windows 10 1803+ 自带)。`curl -H "..."`(无 .exe 后缀)会被 alias 解成 `Invoke-WebRequest -Headers`(期望 hashtable),从而报"无法将 System.String 转换为 IDictionary"。**所有 HTTP 调用显式写 `curl.exe`** |
+| **PS 5.1 反引号 JSON `{\`"key\`":\`"val\`"}` 会产生非法字节** | PS 5.1 预解析多行续行时反引号+双引号转义被 tokenizer 错位,实际发出的 JSON 首字符变成 `u` 或其他非法字节引发后端 500(Jackson `JsonParseException`)。**凡是 JSON body 含 `$变量` 插值,统一用 `@{key="val"} \| ConvertTo-Json -Compress`**。纯常数字符串 JSON(无变量插值)用单引号 `'{"key":"val"}'` 仍然安全 |
 
 ---
 
