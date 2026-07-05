@@ -75,8 +75,12 @@ public class TokenBlacklistService {
         }
 
         String key = BLACKLIST_KEY_PREFIX + jti;
-        stringRedisTemplate.opsForValue().set(key, "1", Duration.ofMillis(ttlMillis));
-        log.info("Token 已加入黑名单: jti={}, ttl={}ms", jti, ttlMillis);
+        try {
+            stringRedisTemplate.opsForValue().set(key, "1", Duration.ofMillis(ttlMillis));
+            log.info("Token 已加入黑名单: jti={}, ttl={}ms", jti, ttlMillis);
+        } catch (Exception e) {
+            log.warn("Redis 不可用，注销黑名单写入跳过: jti={}, reason={}", jti, e.getMessage());
+        }
     }
 
     /**
@@ -89,7 +93,12 @@ public class TokenBlacklistService {
         if (jti == null || jti.isBlank()) {
             return false;
         }
-        Boolean exists = stringRedisTemplate.hasKey(BLACKLIST_KEY_PREFIX + jti);
-        return Boolean.TRUE.equals(exists);
+        try {
+            Boolean exists = stringRedisTemplate.hasKey(BLACKLIST_KEY_PREFIX + jti);
+            return Boolean.TRUE.equals(exists);
+        } catch (Exception e) {
+            log.warn("Redis 不可用，跳过 Token 黑名单校验: jti={}, reason={}", jti, e.getMessage());
+            return false;
+        }
     }
 }

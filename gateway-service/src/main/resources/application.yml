@@ -57,12 +57,12 @@ jwt:
   expiration: 86400000  # 24 hours
 
 rate-limit:
-  enabled: false  # 暂时关闭，因为没有 Redis
+  enabled: true
   article-detail:
     window-seconds: 10
     max-requests: 20
 
-# 由于没有 Redis，暂时关闭限流
+# Redis 仅用于 Token 黑名单；限流配置本地演示使用网关内存窗口
 spring.data.redis:
   repositories:
     enabled: false

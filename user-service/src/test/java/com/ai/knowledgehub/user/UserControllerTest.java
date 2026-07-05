@@ -71,7 +71,7 @@ class UserControllerTest {
     @DisplayName("POST /api/user/register 重复用户名返回 2003")
     void register_duplicateUsername_returns2003() throws Exception {
         String body = objectMapper.writeValueAsString(
-                Map.of("username", "bob", "password", "123456"));
+                Map.of("username", "bobby", "password", "123456"));
 
         // 第一次成功
         mockMvc.perform(post("/api/user/register")
@@ -148,33 +148,27 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/user/profile 带错误 token 返回 2007")
-    void profile_invalidToken_returns2007() throws Exception {
+    @DisplayName("GET /api/user/profile 未透传用户 ID 返回 401")
+    void profile_missingGatewayHeader_returns401() throws Exception {
         mockMvc.perform(get("/api/user/profile")
                         .header("Authorization", "Bearer invalid.token.here"))
-                .andExpect(jsonPath("$.code").value(2007));
+                .andExpect(jsonPath("$.code").value(401));
     }
 
     @Test
-    @DisplayName("GET /api/user/profile 带正确 token 返回 200")
+    @DisplayName("GET /api/user/profile 带网关透传用户 ID 返回 200")
     void profile_validToken_returns200() throws Exception {
-        // 注册
-        mockMvc.perform(post("/api/user/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(
-                        Map.of("username", "frank", "password", "123456"))));
-
-        // 登录拿 token
-        String token = objectMapper.readTree(mockMvc.perform(post("/api/user/login")
+        // 注册并取 userId，模拟 gateway 校验 token 后向下游透传 X-User-Id
+        String registerResponse = mockMvc.perform(post("/api/user/register")
                         .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
                         Map.of("username", "frank", "password", "123456"))))
-                .andReturn().getResponse().getContentAsString())
-                .get("data").get("token").asText();
+                .andReturn().getResponse().getContentAsString();
+        String userId = objectMapper.readTree(registerResponse).get("data").get("userId").asText();
 
         // 访问 profile
         mockMvc.perform(get("/api/user/profile")
-                        .header("Authorization", "Bearer " + token))
+                        .header("X-User-Id", userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.username").value("frank"));
