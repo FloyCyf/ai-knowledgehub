@@ -57,3 +57,19 @@ curl -X PUT http://localhost:8080/api/admin/rate-limit/article-detail \
   -H "Content-Type: application/json" \
   -d '{"windowSeconds":10,"maxRequests":50,"enabled":true}'
 ```
+
+## 统一入口验收
+
+项目根目录提供了 A 负责的网关验收脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
+```
+
+带管理员 Token 时可以完整验证动态限流配置和 429：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1 -AdminToken "<admin-token>"
+```
+
+详细步骤和截图清单见 `docs/acceptance/A-gateway-unified-entry-acceptance.md`。
