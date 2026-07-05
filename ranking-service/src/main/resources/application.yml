@@ -33,7 +33,8 @@ spring:
 
 # 自定义配置
 ranking:
-  # 是否使用 Redis，false 则使用内存模式
+  # 是否使用 Redis，true 走 Redis ZSET，false 走内存 Map
+  # 最终验收口径：true（Redis ZSET 模式），开发期可临时切回 false 走内存 Map
   use-redis: true
 
 logging:

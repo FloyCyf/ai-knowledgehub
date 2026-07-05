@@ -1146,7 +1146,7 @@ test(user): add login test cases
 在项目根目录执行：
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 启动后应包含：
@@ -1379,7 +1379,7 @@ postman/AI-KnowledgeHub.postman_collection.json
 | Maven 测试编译失败 | common 缺少 JUnit 测试依赖 | 补充 `spring-boot-starter-test` | 已修复 |
 | Gateway 路由不一致 | 用户接口曾存在新旧路径不一致 | 统一为 `/api/user/**` | 已修复 |
 | Gateway StripPrefix 导致 404 | 下游服务保留 `/api` 前缀 | 移除 `StripPrefix`，保留完整路径转发 | 已修复 |
-| 热榜默认内存模式 | `ranking.use-redis=false` | 改为 Redis 模式 | 待修复 |
+| 热榜默认内存模式 | `ranking.use-redis=false` | 改为 Redis 模式 | 已修复 |
 
 ---
 
