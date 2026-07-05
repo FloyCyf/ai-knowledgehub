@@ -103,6 +103,7 @@ public class JwtUtil {
 
         return Jwts.builder()
                 .claims(claims)
+                .id(UUID.randomUUID().toString())
                 .subject(username)
                 .issuer(properties.getIssuer())
                 .id(UUID.randomUUID().toString())

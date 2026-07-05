@@ -148,8 +148,8 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/user/profile 未透传用户 ID 返回 401")
-    void profile_missingGatewayHeader_returns401() throws Exception {
+    @DisplayName("GET /api/user/profile 未透传 X-User-Id 返回 401")
+    void profile_withoutGatewayUserHeader_returns401() throws Exception {
         mockMvc.perform(get("/api/user/profile")
                         .header("Authorization", "Bearer invalid.token.here"))
                 .andExpect(jsonPath("$.code").value(401));
@@ -157,18 +157,18 @@ class UserControllerTest {
 
     @Test
     @DisplayName("GET /api/user/profile 带网关透传用户 ID 返回 200")
-    void profile_validToken_returns200() throws Exception {
-        // 注册并取 userId，模拟 gateway 校验 token 后向下游透传 X-User-Id
-        String registerResponse = mockMvc.perform(post("/api/user/register")
+    void profile_withGatewayUserHeader_returns200() throws Exception {
+        // 注册
+        String registerBody = mockMvc.perform(post("/api/user/register")
                         .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
                         Map.of("username", "frank", "password", "123456"))))
                 .andReturn().getResponse().getContentAsString();
-        String userId = objectMapper.readTree(registerResponse).get("data").get("userId").asText();
+        long userId = objectMapper.readTree(registerBody).get("data").get("userId").asLong();
 
         // 访问 profile
         mockMvc.perform(get("/api/user/profile")
-                        .header("X-User-Id", userId))
+                        .header("X-User-Id", String.valueOf(userId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.username").value("frank"));

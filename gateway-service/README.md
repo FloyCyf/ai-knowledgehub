@@ -10,6 +10,25 @@
 - IP 限流。
 - 从 Redis 动态读取限流配置。
 
+## 路由表
+
+所有外部请求统一从 `http://localhost:8080` 进入，网关保留完整 `/api` 前缀转发给下游服务。
+
+| 路径 | 下游服务 | 说明 |
+| --- | --- | --- |
+| `/api/user/**` | `user-service:8081` | 注册、登录、注销、个人信息 |
+| `/api/articles/**` | `article-service:8082` | 文章、评论、点赞 |
+| `/api/ranking/**` | `ranking-service:8083` | 热榜 |
+| `/api/ai/**` | `ai-service:8084` | AI 续写、SSE、分析结果 |
+| `/api/admin/rate-limit/article-detail` | gateway-service | 网关内部动态限流管理接口 |
+
+## 鉴权规则
+
+- 白名单：`POST /api/user/register`、`POST /api/user/login`、`GET /api/articles/latest`、`GET /api/articles/{id}`、`GET /api/ranking/top10`、`/actuator/**`。
+- 其他接口必须携带 `Authorization: Bearer <token>`。
+- 网关解析 JWT 后覆盖客户端传入的 `X-User-Id`、`X-User-Role`、`X-User-Name`，只信任 Token 中的用户上下文。
+- `/api/admin/**` 仅允许 `ADMIN` 角色访问，普通用户返回 403。
+
 ## 重点接口
 
 - `PUT /api/admin/rate-limit/article-detail`
@@ -23,3 +42,18 @@ maxRequests = 20
 enabled = true
 ```
 
+## 限流演示
+
+```bash
+# 文章详情默认 10 秒最多 20 次，第 21 次返回 429
+for i in {1..25}; do
+  curl -s -o /dev/null -w "request $i -> %{http_code}\n" \
+    http://localhost:8080/api/articles/1
+done
+
+# 管理员动态调整配置
+curl -X PUT http://localhost:8080/api/admin/rate-limit/article-detail \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"windowSeconds":10,"maxRequests":50,"enabled":true}'
+```

@@ -16,6 +16,14 @@ spring:
       enabled: true
       path: /h2-console
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      repositories:
+        enabled: false
+
   cloud:
     gateway:
       routes:
@@ -39,12 +47,6 @@ spring:
           predicates:
             - Path=/api/ai/**
 
-        # ============== 管理员接口路由到 user-service ==============
-        - id: admin-routes
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/admin/**
-
       globalcors:
         cors-configurations:
           '[/**]':
@@ -53,7 +55,7 @@ spring:
             allowedHeaders: "*"
 
 jwt:
-  secret: AIKnowledgeHubSecretKey2026VeryLongSecretKeyForJWTSigning
+  secret: ${JWT_SECRET:ai-knowledgehub-default-secret-key-for-jwt-token-generation-2024-do-not-use-in-prod}
   expiration: 86400000  # 24 hours
 
 rate-limit:
@@ -61,8 +63,3 @@ rate-limit:
   article-detail:
     window-seconds: 10
     max-requests: 20
-
-# Redis 仅用于 Token 黑名单；限流配置本地演示使用网关内存窗口
-spring.data.redis:
-  repositories:
-    enabled: false
