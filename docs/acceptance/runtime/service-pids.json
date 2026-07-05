@@ -1,0 +1,47 @@
+﻿[
+    {
+        "name":  "user-service",
+        "module":  "user-service",
+        "port":  8081,
+        "pid":  4492,
+        "stdout":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\user-service.out.log",
+        "stderr":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\user-service.err.log",
+        "ready":  true
+    },
+    {
+        "name":  "article-service",
+        "module":  "article-service",
+        "port":  8082,
+        "pid":  36816,
+        "stdout":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\article-service.out.log",
+        "stderr":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\article-service.err.log",
+        "ready":  true
+    },
+    {
+        "name":  "ranking-service",
+        "module":  "ranking-service",
+        "port":  8083,
+        "pid":  35492,
+        "stdout":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\ranking-service.out.log",
+        "stderr":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\ranking-service.err.log",
+        "ready":  true
+    },
+    {
+        "name":  "ai-service",
+        "module":  "ai-service",
+        "port":  8084,
+        "pid":  35680,
+        "stdout":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\ai-service.out.log",
+        "stderr":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\ai-service.err.log",
+        "ready":  true
+    },
+    {
+        "name":  "gateway-service",
+        "module":  "gateway-service",
+        "port":  8080,
+        "pid":  35796,
+        "stdout":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\gateway-service.out.log",
+        "stderr":  "D:\\大三下作业\\web后端\\ai-knowledgehub\\docs\\acceptance\\runtime\\logs\\gateway-service.err.log",
+        "ready":  true
+    }
+]

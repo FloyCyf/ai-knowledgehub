@@ -1,0 +1,265 @@
+﻿{
+    "baseUrl":  "http://localhost:8080",
+    "username":  "a_accept_20260705211815",
+    "articleId":  1,
+    "adminRateLimitVerified":  false,
+    "generatedAt":  "2026-07-05T21:18:20",
+    "results":  [
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/actuator/health",
+                        "Status":  200,
+                        "Content":  "123 34 115 116 97 116 117 115 34 58 34 85 80 34 125",
+                        "Json":  null
+                    },
+                    {
+                        "Method":  "POST",
+                        "Url":  "http://localhost:8080/api/user/register",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"userId\":1},\"timestamp\":1783257495995,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "userId":  1
+                                              },
+                                     "timestamp":  1783257495995,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "POST",
+                        "Url":  "http://localhost:8080/api/user/login",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"ç»å½æå\",\"data\":{\"token\":\"eyJhbGciOiJIUzUxMiJ9.eyJ1c2VySWQiOjEsInVzZXJuYW1lIjoiYV9hY2NlcHRfMjAyNjA3MDUyMTE4MTUiLCJyb2xlIjoiVVNFUiIsImp0aSI6ImJiYjRiNGQzLWMzNjItNDMzOS1hNWQyLTNlOTljMzY4Y2EwNSIsInN1YiI6ImFfYWNjZXB0XzIwMjYwNzA1MjExODE1IiwiaXNzIjoiYWkta25vd2xlZGdlaHViIiwiaWF0IjoxNzgzMjU3NDk2LCJleHAiOjE3ODMzNDM4OTZ9.EBs0cnYDHOrSSdW6O7xJHej8dA-35eFl8liRQQKBs62rryJSEp7fg73GFhkRqV_yXa_tt497ZfnwQ_2sNur9nQ\",\"expiration\":1783343896228,\"user\":{\"id\":1,\"username\":\"a_accept_20260705211815\",\"role\":\"USER\",\"status\":\"ENABLED\",\"createdAt\":\"2026-07-05T21:18:15.984676\"}},\"timestamp\":1783257496230,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "ç»å½æå",
+                                     "data":  {
+                                                  "token":  "eyJhbGciOiJIUzUxMiJ9.eyJ1c2VySWQiOjEsInVzZXJuYW1lIjoiYV9hY2NlcHRfMjAyNjA3MDUyMTE4MTUiLCJyb2xlIjoiVVNFUiIsImp0aSI6ImJiYjRiNGQzLWMzNjItNDMzOS1hNWQyLTNlOTljMzY4Y2EwNSIsInN1YiI6ImFfYWNjZXB0XzIwMjYwNzA1MjExODE1IiwiaXNzIjoiYWkta25vd2xlZGdlaHViIiwiaWF0IjoxNzgzMjU3NDk2LCJleHAiOjE3ODMzNDM4OTZ9.EBs0cnYDHOrSSdW6O7xJHej8dA-35eFl8liRQQKBs62rryJSEp7fg73GFhkRqV_yXa_tt497ZfnwQ_2sNur9nQ",
+                                                  "expiration":  1783343896228,
+                                                  "user":  {
+                                                               "id":  1,
+                                                               "username":  "a_accept_20260705211815",
+                                                               "role":  "USER",
+                                                               "status":  "ENABLED",
+                                                               "createdAt":  "2026-07-05T21:18:15.984676"
+                                                           }
+                                              },
+                                     "timestamp":  1783257496230,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/api/user/profile",
+                        "Status":  401,
+                        "Content":  "",
+                        "Json":  null
+                    },
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/api/user/profile",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"id\":1,\"username\":\"a_accept_20260705211815\",\"role\":\"USER\",\"status\":\"ENABLED\",\"createdAt\":\"2026-07-05T21:18:15.984676\"},\"timestamp\":1783257496378,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "id":  1,
+                                                  "username":  "a_accept_20260705211815",
+                                                  "role":  "USER",
+                                                  "status":  "ENABLED",
+                                                  "createdAt":  "2026-07-05T21:18:15.984676"
+                                              },
+                                     "timestamp":  1783257496378,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "PUT",
+                        "Url":  "http://localhost:8080/api/admin/rate-limit/article-detail",
+                        "Status":  403,
+                        "Content":  "",
+                        "Json":  null
+                    },
+                    {
+                        "Method":  "POST",
+                        "Url":  "http://localhost:8080/api/articles/draft",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"articleId\":1},\"timestamp\":1783257496617,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "articleId":  1
+                                              },
+                                     "timestamp":  1783257496617,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "POST",
+                        "Url":  "http://localhost:8080/api/articles/1/publish",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":null,\"timestamp\":1783257496844,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  null,
+                                     "timestamp":  1783257496844,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/api/articles/latest",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"total\":0,\"size\":10,\"page\":1,\"list\":[{\"id\":1,\"authorId\":1,\"title\":\"Gateway acceptance article 20260705211815\",\"content\":\"This article is created by scripts/acceptance-gateway.ps1 for gateway acceptance.\",\"summary\":\"Gateway acceptance\",\"status\":\"PUBLISHED\",\"viewCount\":0,\"likeCount\":0,\"commentCount\":0,\"createdAt\":\"2026-07-05 21:18:16\",\"updatedAt\":\"2026-07-05 21:18:16\",\"publishedAt\":\"2026-07-05 21:18:16\"}]},\"timestamp\":1783257496911,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "total":  0,
+                                                  "size":  10,
+                                                  "page":  1,
+                                                  "list":  [
+                                                               {
+                                                                   "id":  1,
+                                                                   "authorId":  1,
+                                                                   "title":  "Gateway acceptance article 20260705211815",
+                                                                   "content":  "This article is created by scripts/acceptance-gateway.ps1 for gateway acceptance.",
+                                                                   "summary":  "Gateway acceptance",
+                                                                   "status":  "PUBLISHED",
+                                                                   "viewCount":  0,
+                                                                   "likeCount":  0,
+                                                                   "commentCount":  0,
+                                                                   "createdAt":  "2026-07-05 21:18:16",
+                                                                   "updatedAt":  "2026-07-05 21:18:16",
+                                                                   "publishedAt":  "2026-07-05 21:18:16"
+                                                               }
+                                                           ]
+                                              },
+                                     "timestamp":  1783257496911,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/api/articles/1",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"id\":1,\"authorId\":1,\"title\":\"Gateway acceptance article 20260705211815\",\"content\":\"This article is created by scripts/acceptance-gateway.ps1 for gateway acceptance.\",\"summary\":\"Gateway acceptance\",\"status\":\"PUBLISHED\",\"viewCount\":1,\"likeCount\":0,\"commentCount\":0,\"createdAt\":\"2026-07-05 21:18:16\",\"updatedAt\":\"2026-07-05 21:18:16\",\"publishedAt\":\"2026-07-05 21:18:16\"},\"timestamp\":1783257496960,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "id":  1,
+                                                  "authorId":  1,
+                                                  "title":  "Gateway acceptance article 20260705211815",
+                                                  "content":  "This article is created by scripts/acceptance-gateway.ps1 for gateway acceptance.",
+                                                  "summary":  "Gateway acceptance",
+                                                  "status":  "PUBLISHED",
+                                                  "viewCount":  1,
+                                                  "likeCount":  0,
+                                                  "commentCount":  0,
+                                                  "createdAt":  "2026-07-05 21:18:16",
+                                                  "updatedAt":  "2026-07-05 21:18:16",
+                                                  "publishedAt":  "2026-07-05 21:18:16"
+                                              },
+                                     "timestamp":  1783257496960,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/api/ranking/top10",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"total\":5,\"articles\":[{\"articleId\":9002,\"hotScore\":10.0},{\"articleId\":9003,\"hotScore\":3.0},{\"articleId\":1,\"hotScore\":3.0},{\"articleId\":9004,\"hotScore\":2.0},{\"articleId\":9001,\"hotScore\":1.0}]},\"timestamp\":1783257496989,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "total":  5,
+                                                  "articles":  [
+                                                                   {
+                                                                       "articleId":  9002,
+                                                                       "hotScore":  10.0
+                                                                   },
+                                                                   {
+                                                                       "articleId":  9003,
+                                                                       "hotScore":  3.0
+                                                                   },
+                                                                   {
+                                                                       "articleId":  1,
+                                                                       "hotScore":  3.0
+                                                                   },
+                                                                   {
+                                                                       "articleId":  9004,
+                                                                       "hotScore":  2.0
+                                                                   },
+                                                                   {
+                                                                       "articleId":  9001,
+                                                                       "hotScore":  1.0
+                                                                   }
+                                                               ]
+                                              },
+                                     "timestamp":  1783257496989,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "POST",
+                        "Url":  "http://localhost:8080/api/ai/continue-writing",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"content\":\"äººå·¥æºè½æ­£å¨æ·±å»æ¹åè½¯ä»¶å¼åçæ¹å¼ãå¤§è¯­è¨æ¨¡åï¼LLMï¼å¦ GPT ç³»åå±ç°äºå¼ºå¤§çææ¬çè§£åçæè½åï¼å¯ä»¥è¾\u0085å©ä»£ç ç¼åãææ¡£çæãæµè¯ç¨ä¾è®¾è®¡ç­å·¥ä½ãå¨å®é\u0085åºç¨ä¸­ï¼éè¿ SSE æµå¼è¾åºå¯ä»¥æä¾æ´å¥½çç¨æ·ä½éªï¼è®©ç¨æ·å®æ¶çå° AI çæçå\u0085å®¹ï¼èä¸æ¯ç­å¾\u0085å®æ´ç»æãæªæ¥ï¼AI Agent å°è½å¤èªä¸»å®ææ´å¤æçå¼åä»»å¡ã\",\"modelName\":\"MockLLM-v1\"},\"timestamp\":1783257497152,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "content":  "äººå·¥æºè½æ­£å¨æ·±å»æ¹åè½¯ä»¶å¼åçæ¹å¼ãå¤§è¯­è¨æ¨¡åï¼LLMï¼å¦ GPT ç³»åå±ç°äºå¼ºå¤§çææ¬çè§£åçæè½åï¼å¯ä»¥è¾\u0085å©ä»£ç ç¼åãææ¡£çæãæµè¯ç¨ä¾è®¾è®¡ç­å·¥ä½ãå¨å®é\u0085åºç¨ä¸­ï¼éè¿ SSE æµå¼è¾åºå¯ä»¥æä¾æ´å¥½çç¨æ·ä½éªï¼è®©ç¨æ·å®æ¶çå° AI çæçå\u0085å®¹ï¼èä¸æ¯ç­å¾\u0085å®æ´ç»æãæªæ¥ï¼AI Agent å°è½å¤èªä¸»å®ææ´å¤æçå¼åä»»å¡ã",
+                                                  "modelName":  "MockLLM-v1"
+                                              },
+                                     "timestamp":  1783257497152,
+                                     "success":  true
+                                 }
+                    },
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/api/ai/continue-writing/stream?prompt=AI%20KnowledgeHub%20gateway%20SSE%20acceptance",
+                        "Status":  200,
+                        "Content":  "data:äººå·¥æºè½æ­£å¨\n\ndata:æ·±å»æ¹åè½¯ä»¶\n\ndata:å¼åçæ¹å¼ã\n\ndata:å¤§è¯­è¨æ¨¡åï¼\n\ndata:LLMï¼å¦ \n\ndata:GPT ç³»å\n\ndata:å±ç°äºå¼ºå¤§ç\n\ndata:ææ¬çè§£åç\n\ndata:æè½åï¼\n\ndata:å¯ä»¥è¾\u0085å©ä»£ç \n\ndata:ç¼åãææ¡£ç\n\ndata:æãæµè¯ç¨ä¾\n\ndata:è®¾è®¡ç­å·¥ä½ã\n\ndata:å¨å®é\u0085åºç¨ä¸­\n\ndata:ï¼éè¿ SS\n\ndata:E æµå¼è¾åº\n\ndata:å¯ä»¥æä¾æ´å¥½\n\ndata:çç¨æ·ä½éªï¼\n\ndata:è®©ç¨æ·å®æ¶ç\n\ndata:å° AI ç\n\ndata:æçå\u0085å®¹ï¼\n\ndata:èä¸æ¯ç­å¾\u0085å®\n\ndata:æ´ç»æã\n\ndata:æªæ¥ï¼AI \n\ndata:Agent \n\ndata:å°è½å¤èªä¸»å®\n\ndata:ææ´å¤æçå¼\n\ndata:åä»»å¡ã\n\n",
+                        "Json":  null
+                    },
+                    {
+                        "Method":  "GET",
+                        "Url":  "http://localhost:8080/api/ai/articles/1/analysis",
+                        "Status":  200,
+                        "Content":  "{\"code\":200,\"message\":\"æä½æå\",\"data\":{\"tag\":{\"articleId\":1,\"tags\":[\"ææ¯\",\"æç¨\",\"ç¼ç¨\"],\"modelName\":\"MockLLM-v1\",\"createdAt\":\"2026-07-05 21:18:17\"},\"audit\":{\"articleId\":1,\"result\":\"PASS\",\"reason\":\"å\u0085å®¹åè§\",\"modelName\":\"MockLLM-v1\",\"createdAt\":\"2026-07-05 21:18:17\"}},\"timestamp\":1783257500257,\"success\":true}",
+                        "Json":  {
+                                     "code":  200,
+                                     "message":  "æä½æå",
+                                     "data":  {
+                                                  "tag":  {
+                                                              "articleId":  1,
+                                                              "tags":  [
+                                                                           "ææ¯",
+                                                                           "æç¨",
+                                                                           "ç¼ç¨"
+                                                                       ],
+                                                              "modelName":  "MockLLM-v1",
+                                                              "createdAt":  "2026-07-05 21:18:17"
+                                                          },
+                                                  "audit":  {
+                                                                "articleId":  1,
+                                                                "result":  "PASS",
+                                                                "reason":  "å\u0085å®¹åè§",
+                                                                "modelName":  "MockLLM-v1",
+                                                                "createdAt":  "2026-07-05 21:18:17"
+                                                            }
+                                              },
+                                     "timestamp":  1783257500257,
+                                     "success":  true
+                                 }
+                    }
+                ]
+}
