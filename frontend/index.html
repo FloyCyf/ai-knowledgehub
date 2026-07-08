@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-KnowledgeHub 期末验收前端</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">AI-KnowledgeHub</p>
+      <h1>期末验收演示台</h1>
+    </div>
+    <div class="gateway-box">
+      <label for="baseUrl">网关地址</label>
+      <div class="inline-control">
+        <input id="baseUrl" type="url" value="http://localhost:8080" spellcheck="false">
+        <button id="saveBaseUrl" type="button">保存</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel account-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>账号</h2>
+          <p>注册、登录后自动携带 JWT。</p>
+        </div>
+        <span id="authStatus" class="status-chip muted">未登录</span>
+      </div>
+
+      <div class="form-grid compact">
+        <label>
+          用户名
+          <input id="username" type="text" autocomplete="username" value="alice">
+        </label>
+        <label>
+          密码
+          <input id="password" type="password" autocomplete="current-password" value="123456">
+        </label>
+      </div>
+
+      <div class="toolbar">
+        <button id="registerBtn" type="button">注册</button>
+        <button id="loginBtn" type="button" class="primary">登录</button>
+        <button id="profileBtn" type="button">查看用户</button>
+        <button id="logoutBtn" type="button" class="danger">退出</button>
+      </div>
+
+      <div id="userSummary" class="summary-line">当前没有登录用户。</div>
+    </section>
+
+    <section class="panel article-editor">
+      <div class="panel-heading">
+        <div>
+          <h2>文章流转</h2>
+          <p>创建草稿、发布、刷新列表、查看详情。</p>
+        </div>
+        <span id="currentArticleBadge" class="status-chip">未选择文章</span>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          标题
+          <input id="articleTitle" type="text" value="Redis ZSET 实现实时热榜">
+        </label>
+        <label>
+          摘要
+          <input id="articleSummary" type="text" value="演示 Redis ZSET 如何支撑热度排行。">
+        </label>
+      </div>
+      <label class="block-label">
+        正文
+        <textarea id="articleContent" rows="8">Redis ZSET 是一个有序集合，适合实现热榜、排行榜和实时评分场景。发布文章后，系统会通过 RabbitMQ 广播事件，再由 AI 服务异步处理标签提取和合规检测。</textarea>
+      </label>
+
+      <div class="toolbar">
+        <button id="createDraftBtn" type="button" class="primary">创建草稿</button>
+        <button id="publishBtn" type="button">发布当前文章</button>
+        <button id="refreshArticlesBtn" type="button">刷新最新列表</button>
+      </div>
+    </section>
+
+    <section class="panel current-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>当前文章</h2>
+          <p>用于点赞、评论、AI 分析查询。</p>
+        </div>
+      </div>
+      <label>
+        当前文章 ID
+        <div class="inline-control">
+          <input id="currentArticleId" type="number" min="1" placeholder="创建或选择文章后自动填入">
+          <button id="loadDetailBtn" type="button">查看详情</button>
+        </div>
+      </label>
+      <article id="articleDetail" class="detail-box empty">暂无文章详情。</article>
+    </section>
+
+    <section class="panel list-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>最新文章</h2>
+          <p>公开接口，按发布时间倒序。</p>
+        </div>
+      </div>
+      <div id="articleList" class="list empty">暂无文章，请先刷新。</div>
+    </section>
+
+    <section class="panel interaction-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>互动</h2>
+          <p>点赞、发表评论、查看评论列表。</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="likeBtn" type="button">点赞当前文章</button>
+        <button id="loadCommentsBtn" type="button">查看评论</button>
+      </div>
+      <label class="block-label">
+        评论内容
+        <textarea id="commentContent" rows="4">这篇文章把热榜设计说明得很清楚。</textarea>
+      </label>
+      <button id="commentBtn" type="button" class="primary">发表评论</button>
+      <div id="commentList" class="list compact-list empty">暂无评论。</div>
+    </section>
+
+    <section class="panel ranking-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>排行榜</h2>
+          <p>读取 Redis ZSET Top10 展示热度。</p>
+        </div>
+        <button id="rankingBtn" type="button">刷新 Top10</button>
+      </div>
+      <div id="rankingList" class="ranking-list empty">暂无排行榜数据。</div>
+    </section>
+
+    <section class="panel ai-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>AI 续写</h2>
+          <p>普通响应与 SSE 流式输出。</p>
+        </div>
+      </div>
+      <label class="block-label">
+        Prompt
+        <textarea id="aiPrompt" rows="4">请继续写一段关于 Redis 热榜和 RabbitMQ 异步处理的验收演示说明。</textarea>
+      </label>
+      <div class="toolbar">
+        <button id="aiContinueBtn" type="button" class="primary">普通续写</button>
+        <button id="aiStreamBtn" type="button">流式续写</button>
+        <button id="aiStopBtn" type="button" class="danger">停止流式</button>
+      </div>
+      <div id="aiResult" class="detail-box empty">暂无 AI 输出。</div>
+    </section>
+
+    <section class="panel log-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>响应记录</h2>
+          <p>最近一次接口结果，便于现场说明。</p>
+        </div>
+        <button id="clearLogBtn" type="button">清空</button>
+      </div>
+      <pre id="responseLog">等待请求...</pre>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

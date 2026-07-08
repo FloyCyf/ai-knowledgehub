@@ -1,6 +1,7 @@
 package com.ai.knowledgehub.gateway.ratelimit;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -10,9 +11,10 @@ import java.util.Map;
 /**
  * Redis 动态限流配置服务。
  */
-@Slf4j
 @Service
 public class RateLimitService {
+
+    private static final Logger log = LoggerFactory.getLogger(RateLimitService.class);
 
     public static final String ARTICLE_DETAIL_CONFIG_KEY = "rate_limit_config:article_detail";
 

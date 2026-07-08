@@ -5,7 +5,8 @@ import com.ai.knowledgehub.gateway.ratelimit.RateLimitConfig;
 import com.ai.knowledgehub.gateway.ratelimit.RateLimitService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -28,9 +29,10 @@ import java.time.Duration;
  * Redis 不可用时采用 fail-open 策略，记录日志后放行请求，保证课程演示链路稳定。
  * </p>
  */
-@Slf4j
 @Component
 public class RateLimitGlobalFilter implements GlobalFilter, Ordered {
+
+    private static final Logger log = LoggerFactory.getLogger(RateLimitGlobalFilter.class);
 
     private final ReactiveStringRedisTemplate redisTemplate;
     private final RateLimitService rateLimitService;
