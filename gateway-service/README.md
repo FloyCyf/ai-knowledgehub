@@ -8,7 +8,7 @@
 - JWT Token 校验。
 - 普通用户和管理员权限判断。
 - IP 限流。
-- 从 Redis 动态读取限流配置。
+- 从 Nacos 配置中心动态读取限流配置，Redis 仅用于限流计数。
 
 ## 路由表
 
@@ -33,13 +33,22 @@
 
 - `PUT /api/admin/rate-limit/article-detail`
 
-## Redis 限流配置
+## Nacos 限流配置
+
+网关从 Nacos `gateway-service.yml` 动态读取文章详情限流配置。本地默认值仍保留在 `application.yml` 中，用于 Nacos 不可用时启动兜底。
+
+```yaml
+rate-limit:
+  enabled: true
+  article-detail:
+    window-seconds: 10
+    max-requests: 20
+```
+
+Redis 只保存固定窗口计数 key，例如：
 
 ```text
-rate_limit_config:article_detail
-windowSeconds = 10
-maxRequests = 20
-enabled = true
+rate_limit:{ip}:/api/articles/{id}
 ```
 
 ## 限流演示
@@ -51,11 +60,11 @@ for i in {1..25}; do
     http://localhost:8080/api/articles/1
 done
 
-# 管理员动态调整配置
+# 管理员通过网关发布配置到 Nacos
 curl -X PUT http://localhost:8080/api/admin/rate-limit/article-detail \
   -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
-  -d '{"windowSeconds":10,"maxRequests":50,"enabled":true}'
+  -d '{"windowSeconds":10,"maxRequests":5,"enabled":true}'
 ```
 
 ## 统一入口验收
@@ -70,6 +79,12 @@ powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1 -AdminToken "<admin-token>"
+```
+
+也可以单独验证 Nacos 动态配置中心限流：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-nacos-rate-limit.ps1 -AdminToken "<admin-token>"
 ```
 
 详细步骤和截图清单见 `docs/acceptance/A-gateway-unified-entry-acceptance.md`。

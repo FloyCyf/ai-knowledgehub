@@ -120,6 +120,19 @@ public class RankingController {
      *
      * @return Top10 热榜文章列表（按热度降序）
      */
+    @DeleteMapping("/articles/{id}")
+    public ApiResponse<Map<String, Object>> removeArticle(@PathVariable Long id) {
+        log.info("Remove article from ranking - articleId: {}", id);
+
+        rankingService.removeArticle(id);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("articleId", id);
+        data.put("action", "remove");
+
+        return ApiResponse.success(data);
+    }
+
     @GetMapping("/top10")
     public ApiResponse<Map<String, Object>> getTop10() {
         log.info("获取热榜 Top10 请求");

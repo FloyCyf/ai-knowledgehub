@@ -1,6 +1,11 @@
 param(
     [string]$LogDir = "docs/acceptance/runtime/logs",
-    [int]$StartupTimeoutSeconds = 90
+    [int]$StartupTimeoutSeconds = 90,
+    [switch]$RankingUseRedis,
+    [string]$RedisHost = "127.0.0.1",
+    [int]$RedisPort = 6379,
+    [int]$RedisDatabase = 0,
+    [string]$NacosUrl = "http://localhost:8848"
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +34,24 @@ $busyPorts = @($requiredPorts | Where-Object { Test-PortListening -Port $_ })
 if ($busyPorts.Count -gt 0) {
     $portText = $busyPorts -join ", "
     throw "Ports already in use: $portText. Run scripts\stop-all-services.ps1 first, then start again."
+}
+
+function Test-NacosReady {
+    param([string]$BaseUrl)
+    $readyUrl = $BaseUrl.TrimEnd("/") + "/nacos/v1/console/health/readiness"
+    try {
+        $response = Invoke-WebRequest -Uri $readyUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+        return ($response.StatusCode -eq 200 -and [string]$response.Content -match "OK|UP")
+    } catch {
+        return $false
+    }
+}
+
+if (Test-NacosReady -BaseUrl $NacosUrl) {
+    Write-Host "[OK] Nacos config center is ready at $NacosUrl" -ForegroundColor Green
+} else {
+    Write-Host "[WARN] Nacos is not ready at $NacosUrl. Gateway will use local defaults, and dynamic config publishing will fail until Nacos starts." -ForegroundColor Yellow
+    Write-Host "       Run: docker compose up -d nacos" -ForegroundColor Yellow
 }
 
 Write-Host "Installing project modules to local Maven repository ..." -ForegroundColor Cyan
@@ -73,7 +96,8 @@ function Start-ServiceModule {
     param(
         [string]$Name,
         [string]$ModuleDir,
-        [int]$Port
+        [int]$Port,
+        [string[]]$MavenArguments = @("spring-boot:run")
     )
 
     Write-Host "Starting $Name on port $Port ..." -ForegroundColor Cyan
@@ -83,7 +107,7 @@ function Start-ServiceModule {
 
     $process = Start-Process `
         -FilePath $mvnCommand.Source `
-        -ArgumentList @("spring-boot:run") `
+        -ArgumentList $MavenArguments `
         -WorkingDirectory $workDir `
         -RedirectStandardOutput $stdout `
         -RedirectStandardError $stderr `
@@ -105,20 +129,41 @@ function Start-ServiceModule {
         stdout = $stdout
         stderr = $stderr
         ready = $ready
+        arguments = $MavenArguments
     }
 }
+
+$rankingArguments = @("spring-boot:run")
+if ($RankingUseRedis) {
+    $rankingArguments = @(
+        "spring-boot:run",
+        "-Dranking.use-redis=true",
+        "-Dspring.data.redis.host=$RedisHost",
+        "-Dspring.data.redis.port=$RedisPort",
+        "-Dspring.data.redis.database=$RedisDatabase"
+    )
+    Write-Host "Ranking service will use Redis ZSET mode for acceptance video. Redis=$RedisHost`:$RedisPort/$RedisDatabase" -ForegroundColor Cyan
+}
+
+$nacosServerAddr = $NacosUrl.TrimEnd("/") -replace "^https?://", ""
+$gatewayArguments = @("spring-boot:run", "-Dspring-boot.run.arguments=--spring.cloud.nacos.config.server-addr=$nacosServerAddr")
+Write-Host "Gateway Nacos config enabled. server-addr=$nacosServerAddr, dataId=gateway-service.yml" -ForegroundColor Cyan
 
 $services = @(
     @{ Name = "user-service"; ModuleDir = "user-service"; Port = 8081 },
     @{ Name = "article-service"; ModuleDir = "article-service"; Port = 8082 },
-    @{ Name = "ranking-service"; ModuleDir = "ranking-service"; Port = 8083 },
+    @{ Name = "ranking-service"; ModuleDir = "ranking-service"; Port = 8083; MavenArguments = $rankingArguments },
     @{ Name = "ai-service"; ModuleDir = "ai-service"; Port = 8084 },
-    @{ Name = "gateway-service"; ModuleDir = "gateway-service"; Port = 8080 }
+    @{ Name = "gateway-service"; ModuleDir = "gateway-service"; Port = 8080; MavenArguments = $gatewayArguments }
 )
 
 $started = New-Object System.Collections.Generic.List[object]
 foreach ($service in $services) {
-    $started.Add((Start-ServiceModule -Name $service.Name -ModuleDir $service.ModuleDir -Port $service.Port))
+    $argsForService = @("spring-boot:run")
+    if ($service.ContainsKey("MavenArguments")) {
+        $argsForService = $service.MavenArguments
+    }
+    $started.Add((Start-ServiceModule -Name $service.Name -ModuleDir $service.ModuleDir -Port $service.Port -MavenArguments $argsForService))
 }
 
 $started | ConvertTo-Json -Depth 10 | Set-Content -Path $pidFile -Encoding UTF8

@@ -186,6 +186,16 @@ public class RankingService {
         }
     }
 
+    public void removeArticle(Long articleId) {
+        if (useRedis && stringRedisTemplate != null) {
+            Long removed = stringRedisTemplate.opsForZSet().remove(HOT_RANKING_KEY, articleId.toString());
+            log.info("Remove article {} from Redis ranking, removed={}", articleId, removed);
+        } else {
+            memoryHotScore.remove(articleId);
+            log.info("Remove article {} from memory ranking", articleId);
+        }
+    }
+
     /**
      * 通用热度增加方法
      * 

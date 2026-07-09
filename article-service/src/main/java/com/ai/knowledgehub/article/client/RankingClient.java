@@ -79,6 +79,16 @@ public class RankingClient {
      *
      * @return 文章ID列表
      */
+    public void notifyDelete(Long articleId) {
+        try {
+            String url = rankingServiceUrl + "/api/ranking/articles/" + articleId;
+            restTemplate.delete(url);
+            log.info("Notify ranking-service delete success, articleId: {}", articleId);
+        } catch (RestClientException e) {
+            log.warn("Notify ranking-service delete failed, articleId: {}, error: {}", articleId, e.getMessage());
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public java.util.List<Long> getTopArticles() {
         try {

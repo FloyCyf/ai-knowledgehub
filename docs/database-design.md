@@ -81,9 +81,9 @@ article_id + user_id
 | model_name | varchar(100) | 模型名称或 Mock 标识 |
 | created_at | datetime | 创建时间 |
 
-## rate_limit_rule 限流规则表，可选
+## rate_limit_rule 限流规则表，已由 Nacos 替代
 
-如果希望从 MySQL 管理限流规则，可以增加该表。若降低实现难度，也可以直接将限流配置放入 Redis Hash。
+早期方案曾考虑使用 MySQL 表或 Redis Hash 保存限流规则。最终实现采用 Nacos Config 作为严格意义上的配置中心，`gateway-service.yml` 动态下发文章详情限流参数，因此数据库不再需要维护限流规则表。
 
 | 字段 | 类型建议 | 说明 |
 | --- | --- | --- |
@@ -130,19 +130,17 @@ rate_limit:127.0.0.1:/api/articles/1001
 
 过期时间：10 秒。
 
-### 动态限流配置
+### 动态限流配置，Nacos
 
-```text
-rate_limit_config:article_detail
+```yaml
+rate-limit:
+  enabled: true
+  article-detail:
+    window-seconds: 10
+    max-requests: 20
 ```
 
-字段：
-
-```text
-windowSeconds = 10
-maxRequests = 20
-enabled = true
-```
+配置中心 Data ID：`gateway-service.yml`。Redis 只保留 `rate_limit:{ip}:{path}` 固定窗口计数 key。
 
 ### Token 黑名单，可选
 
@@ -151,4 +149,3 @@ token:blacklist:{tokenId}
 ```
 
 用于注销后 Token 失效控制。
-

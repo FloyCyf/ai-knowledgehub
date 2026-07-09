@@ -1,0 +1,286 @@
+{
+  "info": {
+    "name": "AI-KnowledgeHub Gateway Acceptance",
+    "description": "Gateway-only acceptance collection for the AI-KnowledgeHub Web backend course project. Run requests in order.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "gatewayUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "username", "value": "pm_user_{{$timestamp}}", "type": "string" },
+    { "key": "password", "value": "123456", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "articleId", "value": "", "type": "string" },
+    { "key": "deleteArticleId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "01 Gateway Health",
+      "request": {
+        "method": "GET",
+        "url": "{{gatewayUrl}}/actuator/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Gateway health is 200', function () { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Profile Without Token Returns 401",
+      "request": {
+        "method": "GET",
+        "url": "{{gatewayUrl}}/api/user/profile"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Protected profile returns 401 without token', function () { pm.response.to.have.status(401); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Register User",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{gatewayUrl}}/api/user/register"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Register success', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().code).to.eql(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Login User And Save Token",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{gatewayUrl}}/api/user/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('Login success', function () { pm.response.to.have.status(200); pm.expect(json.code).to.eql(200); pm.expect(json.data.token).to.be.a('string'); });",
+              "pm.collectionVariables.set('token', json.data.token);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Profile With Token",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{gatewayUrl}}/api/user/profile"
+      }
+    },
+    {
+      "name": "06 Create Article Draft And Save Id",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Postman Gateway Acceptance Article\",\n  \"content\": \"This article is created by the gateway acceptance Postman collection.\",\n  \"summary\": \"Postman acceptance article\"\n}"
+        },
+        "url": "{{gatewayUrl}}/api/articles/draft"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('Create draft success', function () { pm.response.to.have.status(200); pm.expect(json.code).to.eql(200); });",
+              "pm.collectionVariables.set('articleId', json.data.articleId);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Publish Article",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{gatewayUrl}}/api/articles/{{articleId}}/publish"
+      }
+    },
+    {
+      "name": "08 Update Article",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Postman Gateway Acceptance Article Updated\",\n  \"content\": \"Updated by Postman through gateway.\",\n  \"summary\": \"Updated summary\"\n}"
+        },
+        "url": "{{gatewayUrl}}/api/articles/{{articleId}}"
+      }
+    },
+    {
+      "name": "09 Get Article Detail",
+      "request": {
+        "method": "GET",
+        "url": "{{gatewayUrl}}/api/articles/{{articleId}}"
+      }
+    },
+    {
+      "name": "10 Add Comment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Postman comment through gateway\"\n}"
+        },
+        "url": "{{gatewayUrl}}/api/articles/{{articleId}}/comments"
+      }
+    },
+    {
+      "name": "11 Like Article",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{gatewayUrl}}/api/articles/{{articleId}}/like"
+      }
+    },
+    {
+      "name": "12 Latest Articles",
+      "request": {
+        "method": "GET",
+        "url": "{{gatewayUrl}}/api/articles/latest?page=1&size=10"
+      }
+    },
+    {
+      "name": "13 Ranking Top10",
+      "request": {
+        "method": "GET",
+        "url": "{{gatewayUrl}}/api/ranking/top10"
+      }
+    },
+    {
+      "name": "14 AI Continue Writing",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"prompt\": \"Write one short paragraph about Redis ZSET.\"\n}"
+        },
+        "url": "{{gatewayUrl}}/api/ai/continue-writing"
+      }
+    },
+    {
+      "name": "15 Admin Login And Save Token",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin_demo\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": "{{gatewayUrl}}/api/user/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('Admin login success', function () { pm.response.to.have.status(200); pm.expect(json.data.token).to.be.a('string'); });",
+              "pm.collectionVariables.set('adminToken', json.data.token);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Normal User Calls Admin API Returns 403",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"windowSeconds\": 10,\n  \"maxRequests\": 5,\n  \"enabled\": true\n}"
+        },
+        "url": "{{gatewayUrl}}/api/admin/rate-limit/article-detail"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Normal user is forbidden', function () { pm.response.to.have.status(403); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Admin Updates Rate Limit Config",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"windowSeconds\": 10,\n  \"maxRequests\": 20,\n  \"enabled\": true\n}"
+        },
+        "url": "{{gatewayUrl}}/api/admin/rate-limit/article-detail"
+      }
+    }
+  ]
+}

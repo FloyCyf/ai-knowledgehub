@@ -79,6 +79,8 @@
       <div class="toolbar">
         <button id="createDraftBtn" type="button" class="primary">创建草稿</button>
         <button id="publishBtn" type="button">发布当前文章</button>
+        <button id="updateArticleBtn" type="button">修改当前文章</button>
+        <button id="deleteArticleBtn" type="button" class="danger">逻辑删除当前文章</button>
         <button id="refreshArticlesBtn" type="button">刷新最新列表</button>
       </div>
     </section>
@@ -97,6 +99,9 @@
           <button id="loadDetailBtn" type="button">查看详情</button>
         </div>
       </label>
+      <div class="toolbar">
+        <button id="aiAnalysisBtn" type="button">查看 AI 分析</button>
+      </div>
       <article id="articleDetail" class="detail-box empty">暂无文章详情。</article>
     </section>
 
@@ -138,6 +143,30 @@
         <button id="rankingBtn" type="button">刷新 Top10</button>
       </div>
       <div id="rankingList" class="ranking-list empty">暂无排行榜数据。</div>
+    </section>
+
+    <section class="panel admin-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>网关限流</h2>
+          <p>管理员接口，Nacos 动态下发文章详情限流配置。</p>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>
+          时间窗口（秒）
+          <input id="rateWindow" type="number" min="1" value="10">
+        </label>
+        <label>
+          最大请求数
+          <input id="rateMax" type="number" min="1" value="20">
+        </label>
+      </div>
+      <div class="toolbar">
+        <button id="rateLoadBtn" type="button">读取配置</button>
+        <button id="rateSetBtn" type="button" class="primary">保存配置</button>
+        <button id="rateLimitDemoBtn" type="button">设置演示值 5</button>
+      </div>
     </section>
 
     <section class="panel ai-panel">

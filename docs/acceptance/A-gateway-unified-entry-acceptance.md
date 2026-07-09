@@ -16,6 +16,7 @@ Required local services:
 | MySQL | 3306 |
 | Redis | 6379 |
 | RabbitMQ | 5672 / 15672 |
+| Nacos | 8848 |
 
 Start middleware first:
 
@@ -51,6 +52,12 @@ Or run the helper script from the project root:
 powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1
 ```
 
+For final demo recording, prefer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1 -RankingUseRedis
+```
+
 The helper starts services in the same order, writes logs to `docs/acceptance/runtime/logs/`, and records process IDs in `docs/acceptance/runtime/service-pids.json`.
 It also runs `mvn -DskipTests install` first, so local modules such as `common:1.0.0` can be resolved when each service starts.
 
@@ -84,10 +91,12 @@ The script verifies:
 - `GET /api/user/profile` returns `401` without token.
 - `GET /api/user/profile` succeeds with token.
 - Forged `X-User-Id`, `X-User-Role`, and `X-User-Name` headers are overwritten by the gateway.
+- `POST /api/user/logout` invalidates the old token.
 - Normal user access to `/api/admin/**` returns `403`.
-- Article draft creation, publish, latest list, and detail route through gateway.
+- Article draft creation, publish, update, logical delete, latest list, and detail route through gateway.
 - Ranking `GET /api/ranking/top10` route through gateway.
 - AI sync, SSE, and article analysis routes through gateway.
+- RabbitMQ fanout evidence for `article.tag.queue` and `article.audit.queue`.
 
 The script writes the latest runtime record to:
 
@@ -106,22 +115,19 @@ powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1 -AdminTo
 Expected behavior:
 
 - `PUT /api/admin/rate-limit/article-detail` succeeds with admin token.
-- The script changes article-detail limit to `windowSeconds=10`, `maxRequests=5`, `enabled=true`.
+- The admin API publishes article-detail limit config to Nacos `gateway-service.yml`.
+- Nacos config contains `window-seconds=10`, `max-requests=5`, `enabled=true`.
+- Gateway refreshes the Nacos config without restart.
 - The 6th request within the same 10-second window returns `429`.
 - The script restores the default config to `windowSeconds=10`, `maxRequests=20`, `enabled=true`.
 
-If no admin account exists, prepare one before the demo. For the default dev profile, `user-service` uses in-memory H2, so the easiest reproducible approach is:
+You can also run the focused Nacos rate-limit script:
 
-1. Register a normal user through the gateway.
-2. Open the `user-service` H2 console: `http://localhost:8081/h2-console`.
-3. Use JDBC URL `jdbc:h2:mem:akh_user`.
-4. Run:
-
-```sql
-UPDATE sys_user SET role = 'ADMIN' WHERE username = '<registered-username>';
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-nacos-rate-limit.ps1 -AdminToken "<admin-token>"
 ```
 
-5. Login again through `POST http://localhost:8080/api/user/login` to obtain an admin token.
+For the default dev profile, `user-service` creates `admin_demo / 123456` automatically. Login through `POST http://localhost:8080/api/user/login` to obtain the admin token.
 
 ## Manual Evidence Checklist
 
@@ -144,15 +150,21 @@ Recommended screenshot names:
 08-admin-403.png
 09-rate-limit-config.png
 10-rate-limit-429.png
-11-redis-rate-limit-key.png
+11-nacos-rate-limit-config.png
 12-gateway-ai-route.png
 ```
 
-Redis verification commands:
+Nacos verification:
+
+```text
+http://localhost:8848/nacos
+dataId: gateway-service.yml
+```
+
+Redis verification only checks rate-limit counters, not config:
 
 ```powershell
 docker exec akh-redis redis-cli keys "rate_limit:*"
-docker exec akh-redis redis-cli hgetall "rate_limit_config:article_detail"
 ```
 
 If `REDIS_PASSWORD` is configured, add `-a <password>` to `redis-cli`.
@@ -166,5 +178,6 @@ A can mark the gateway unified-entry acceptance as passed only when:
 - Unauthenticated protected access returns `401`.
 - Normal user access to `/api/admin/**` returns `403`.
 - Admin rate-limit update works without restarting gateway.
+- Nacos `gateway-service.yml` shows the dynamic rate-limit config.
 - Article detail requests can trigger `429`.
 - Runtime evidence and screenshots are saved for the final course report.

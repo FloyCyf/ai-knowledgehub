@@ -4,59 +4,59 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * 用户服务数据库初始化
- * <p>
- * 仅用于本地 H2 dev 环境。生产环境（MySQL）由 {@code docs/database-init.sql} 一次性建表。
- * </p>
- * <p>
- * 表结构与 {@code docs/database-design.md} 第 7~16 行 + {@code docs/database-init.sql} 第 19~32 行严格一致。
- * </p>
- *
- * @author AI KnowledgeHub Team
+ * Initializes the local H2 schema used by the dev profile.
  */
 @Slf4j
 @Component
-@Order(1)  // 优先于业务 Runner 执行
+@Profile("dev")
+@Order(1)
 public class UserDatabaseInitializer implements ApplicationRunner {
+
+    private static final String DEFAULT_ADMIN_USERNAME = "admin_demo";
+    private static final String DEFAULT_ADMIN_PASSWORD = "123456";
 
     @Autowired
     private DataSource dataSource;
+
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
 
     @Override
     public void run(ApplicationArguments args) {
         try (Connection conn = dataSource.getConnection()) {
             createUserTable(conn);
-            log.info("User table 初始化完成");
+            createDefaultAdmin(conn);
+            log.info("User table initialized");
         } catch (SQLException e) {
-            log.error("User table 初始化失败", e);
+            log.error("User table initialization failed", e);
         }
     }
 
-    /**
-     * 创建 user 表（与 docs/database-init.sql 一致）
-     */
     private void createUserTable(Connection conn) throws SQLException {
         String sql = """
                 CREATE TABLE IF NOT EXISTS `sys_user` (
-                    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '用户ID',
-                    `username` VARCHAR(50) NOT NULL COMMENT '用户名',
-                    `password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希值',
-                    `role` VARCHAR(32) NOT NULL DEFAULT 'USER' COMMENT '用户角色',
-                    `status` VARCHAR(32) NOT NULL DEFAULT 'ENABLED' COMMENT '用户状态',
-                    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                    `create_by` BIGINT DEFAULT NULL COMMENT '创建人ID',
-                    `update_by` BIGINT DEFAULT NULL COMMENT '更新人ID',
-                    `deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+                    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'user id',
+                    `username` VARCHAR(50) NOT NULL COMMENT 'username',
+                    `password_hash` VARCHAR(255) NOT NULL COMMENT 'bcrypt password hash',
+                    `role` VARCHAR(32) NOT NULL DEFAULT 'USER' COMMENT 'user role',
+                    `status` VARCHAR(32) NOT NULL DEFAULT 'ENABLED' COMMENT 'user status',
+                    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
+                    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated time',
+                    `create_by` BIGINT DEFAULT NULL COMMENT 'created by',
+                    `update_by` BIGINT DEFAULT NULL COMMENT 'updated by',
+                    `deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'logical delete flag',
                     PRIMARY KEY (`id`),
                     UNIQUE KEY `uk_username` (`username`),
                     KEY `idx_role` (`role`),
@@ -65,7 +65,45 @@ public class UserDatabaseInitializer implements ApplicationRunner {
                 """;
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
-            log.debug("Table 'user' created or already exists");
+            log.debug("Table 'sys_user' created or already exists");
+        }
+    }
+
+    private void createDefaultAdmin(Connection conn) throws SQLException {
+        String checkSql = "SELECT COUNT(*) FROM sys_user WHERE username = ? AND deleted = 0";
+        try (PreparedStatement check = conn.prepareStatement(checkSql)) {
+            check.setString(1, DEFAULT_ADMIN_USERNAME);
+            try (ResultSet rs = check.executeQuery()) {
+                if (rs.next() && rs.getLong(1) > 0) {
+                    resetDefaultAdmin(conn);
+                    return;
+                }
+            }
+        }
+
+        String insertSql = """
+                INSERT INTO sys_user (username, password_hash, role, status, create_by, update_by)
+                VALUES (?, ?, 'ADMIN', 'ENABLED', 0, 0)
+                """;
+        try (PreparedStatement insert = conn.prepareStatement(insertSql)) {
+            insert.setString(1, DEFAULT_ADMIN_USERNAME);
+            insert.setString(2, passwordEncoder.encode(DEFAULT_ADMIN_PASSWORD));
+            insert.executeUpdate();
+            log.info("Default dev admin account created: {}", DEFAULT_ADMIN_USERNAME);
+        }
+    }
+
+    private void resetDefaultAdmin(Connection conn) throws SQLException {
+        String updateSql = """
+                UPDATE sys_user
+                SET password_hash = ?, role = 'ADMIN', status = 'ENABLED', deleted = 0
+                WHERE username = ?
+                """;
+        try (PreparedStatement update = conn.prepareStatement(updateSql)) {
+            update.setString(1, passwordEncoder.encode(DEFAULT_ADMIN_PASSWORD));
+            update.setString(2, DEFAULT_ADMIN_USERNAME);
+            update.executeUpdate();
+            log.info("Default dev admin account reset: {}", DEFAULT_ADMIN_USERNAME);
         }
     }
 }

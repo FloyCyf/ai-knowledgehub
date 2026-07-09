@@ -8,12 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * JwtUtil 单元测试
- *
- * @author AI KnowledgeHub Team
- */
-@DisplayName("JwtUtil 单元测试")
+@DisplayName("JwtUtil unit tests")
 class JwtUtilTest {
 
     private JwtProperties properties;
@@ -28,7 +23,7 @@ class JwtUtilTest {
     }
 
     @Test
-    @DisplayName("生成 Token 后可解析出原始数据")
+    @DisplayName("generated token can be parsed")
     void generateAndParse() {
         String token = JwtUtil.generateToken(123L, "alice", "USER");
         assertNotNull(token);
@@ -43,20 +38,21 @@ class JwtUtilTest {
     }
 
     @Test
-    @DisplayName("无效签名抛 AuthException(TOKEN_INVALID)")
+    @DisplayName("tampered token throws TOKEN_INVALID")
     void invalidSignature_throws() {
         String token = JwtUtil.generateToken(1L, "alice", "USER");
-        // 篡改 token 最后一位
-        String tampered = token.substring(0, token.length() - 1) + "x";
+        String[] parts = token.split("\\.");
+        char replacement = parts[1].charAt(0) == 'a' ? 'b' : 'a';
+        parts[1] = replacement + parts[1].substring(1);
+        String tampered = String.join(".", parts);
 
         AuthException ex = assertThrows(AuthException.class,
                 () -> JwtUtil.parseToken(tampered));
-        assertTrue(ex.getMessage().contains("签名") || ex.getMessage().contains("无效")
-                || ex.getCode() == 2007);
+        assertEquals(2007, ex.getCode());
     }
 
     @Test
-    @DisplayName("错误格式抛 AuthException(TOKEN_INVALID)")
+    @DisplayName("malformed token throws TOKEN_INVALID")
     void malformedToken_throws() {
         AuthException ex = assertThrows(AuthException.class,
                 () -> JwtUtil.parseToken("not-a-jwt"));
@@ -64,17 +60,20 @@ class JwtUtilTest {
     }
 
     @Test
-    @DisplayName("过期 Token 抛 AuthException(TOKEN_EXPIRED)")
+    @DisplayName("expired token throws TOKEN_EXPIRED")
     void expiredToken_throws() {
         JwtProperties shortExp = new JwtProperties();
         shortExp.setSecret(properties.getSecret());
-        shortExp.setExpirationMillis(0L);  // 立即过期
+        shortExp.setExpirationMillis(0L);
         shortExp.setIssuer(properties.getIssuer());
 
         String token = JwtUtil.generateToken(1L, "alice", "USER", shortExp);
 
-        // 等待 10ms 确保过期
-        try { Thread.sleep(10); } catch (InterruptedException e) {}
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
 
         AuthException ex = assertThrows(AuthException.class,
                 () -> JwtUtil.parseToken(token));
@@ -82,20 +81,20 @@ class JwtUtilTest {
     }
 
     @Test
-    @DisplayName("validateToken 对有效 Token 返回 true")
+    @DisplayName("validateToken returns true for valid token")
     void validateToken_valid() {
         String token = JwtUtil.generateToken(1L, "alice", "USER");
         assertTrue(JwtUtil.validateToken(token));
     }
 
     @Test
-    @DisplayName("validateToken 对无效 Token 返回 false（不抛异常）")
+    @DisplayName("validateToken returns false for invalid token")
     void validateToken_invalid_returnsFalse() {
         assertFalse(JwtUtil.validateToken("not-a-jwt"));
     }
 
     @Test
-    @DisplayName("extractToken 正确去除 Bearer 前缀")
+    @DisplayName("extractToken removes Bearer prefix")
     void extractToken() {
         assertEquals("abc.def.ghi", JwtUtil.extractToken("Bearer abc.def.ghi"));
         assertNull(JwtUtil.extractToken("Basic xxx"));
@@ -103,7 +102,7 @@ class JwtUtilTest {
     }
 
     @Test
-    @DisplayName("refreshToken 生成新 Token 且数据一致")
+    @DisplayName("refreshToken keeps user claims")
     void refreshToken() {
         String oldToken = JwtUtil.generateToken(99L, "bob", "ADMIN");
         Claims oldClaims = JwtUtil.parseToken(oldToken);
@@ -113,11 +112,11 @@ class JwtUtilTest {
         assertEquals(JwtUtil.getUserId(oldClaims), JwtUtil.getUserId(newClaims));
         assertEquals(JwtUtil.getUsername(oldClaims), JwtUtil.getUsername(newClaims));
         assertEquals(JwtUtil.getRole(oldClaims), JwtUtil.getRole(newClaims));
-        assertNotEquals(oldToken, newToken, "新 Token 必须不同（iat 时间不同）");
+        assertNotEquals(oldToken, newToken);
     }
 
     @Test
-    @DisplayName("密钥不足 32 字节抛 IllegalStateException")
+    @DisplayName("short secret throws IllegalStateException")
     void shortSecret_throws() {
         JwtProperties bad = new JwtProperties();
         bad.setSecret("short");

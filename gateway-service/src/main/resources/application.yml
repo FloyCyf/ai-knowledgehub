@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: gateway-service
+  config:
+    import: optional:nacos:gateway-service.yml
 
   # H2 数据库配置（用于启动）
   datasource:
@@ -25,6 +27,13 @@ spring:
         enabled: false
 
   cloud:
+    nacos:
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        group: ${NACOS_CONFIG_GROUP:DEFAULT_GROUP}
+        namespace: ${NACOS_NAMESPACE:}
+        file-extension: yml
+        refresh-enabled: true
     gateway:
       routes:
         - id: user-service

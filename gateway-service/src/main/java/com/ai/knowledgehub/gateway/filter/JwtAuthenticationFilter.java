@@ -15,6 +15,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -48,14 +49,17 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     );
 
     private static final String ADMIN_PREFIX = "/api/admin/";
+    private static final String TOKEN_BLACKLIST_KEY_PREFIX = "token:blacklist:";
 
     @Value("${jwt.secret}")
     private String jwtSecret;
 
     private final ObjectMapper objectMapper;
+    private final ReactiveStringRedisTemplate redisTemplate;
 
-    public JwtAuthenticationFilter(ObjectMapper objectMapper) {
+    public JwtAuthenticationFilter(ObjectMapper objectMapper, ReactiveStringRedisTemplate redisTemplate) {
         this.objectMapper = objectMapper;
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -86,20 +90,28 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 return writeJson(exchange, HttpStatus.FORBIDDEN, ApiResponse.fail(403, "无权限访问"));
             }
 
-            ServerHttpRequest modifiedRequest = request.mutate()
-                    .headers(headers -> {
-                        headers.remove(HeaderConstants.X_USER_ID);
-                        headers.remove(HeaderConstants.X_USER_ROLE);
-                        headers.remove(HeaderConstants.X_USER_NAME);
-                        headers.set(HeaderConstants.X_USER_ID, String.valueOf(userId));
-                        headers.set(HeaderConstants.X_USER_ROLE, role);
-                        if (username != null && !username.isBlank()) {
-                            headers.set(HeaderConstants.X_USER_NAME, username);
+            return isTokenBlacklisted(claims)
+                    .flatMap(blacklisted -> {
+                        if (blacklisted) {
+                            return writeJson(exchange, HttpStatus.UNAUTHORIZED,
+                                    ApiResponse.fail(401, "Token has been logged out"));
                         }
-                    })
-                    .build();
 
-            return chain.filter(exchange.mutate().request(modifiedRequest).build());
+                        ServerHttpRequest modifiedRequest = request.mutate()
+                                .headers(headers -> {
+                                    headers.remove(HeaderConstants.X_USER_ID);
+                                    headers.remove(HeaderConstants.X_USER_ROLE);
+                                    headers.remove(HeaderConstants.X_USER_NAME);
+                                    headers.set(HeaderConstants.X_USER_ID, String.valueOf(userId));
+                                    headers.set(HeaderConstants.X_USER_ROLE, role);
+                                    if (username != null && !username.isBlank()) {
+                                        headers.set(HeaderConstants.X_USER_NAME, username);
+                                    }
+                                })
+                                .build();
+
+                        return chain.filter(exchange.mutate().request(modifiedRequest).build());
+                    });
         } catch (Exception e) {
             log.warn("Token 验证失败: {}", e.getMessage());
             return writeJson(exchange, HttpStatus.UNAUTHORIZED, ApiResponse.fail(401, "Token 无效或已过期"));
@@ -109,6 +121,9 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     private boolean isPublicEndpoint(ServerHttpRequest request) {
         String path = request.getURI().getPath();
         HttpMethod method = request.getMethod();
+        if (HttpMethod.OPTIONS.equals(method)) {
+            return true;
+        }
         if (PUBLIC_PREFIXES.stream().anyMatch(path::startsWith)) {
             return true;
         }
@@ -140,6 +155,23 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    private Mono<Boolean> isTokenBlacklisted(Claims claims) {
+        String jti = claims.getId();
+        if (jti == null || jti.isBlank()) {
+            jti = claims.getSubject();
+        }
+        if (jti == null || jti.isBlank()) {
+            return Mono.just(false);
+        }
+
+        return redisTemplate.hasKey(TOKEN_BLACKLIST_KEY_PREFIX + jti)
+                .map(Boolean.TRUE::equals)
+                .onErrorResume(e -> {
+                    log.warn("Token blacklist check failed, using fail-open policy: {}", e.getMessage());
+                    return Mono.just(false);
+                });
     }
 
     private Mono<Void> writeJson(ServerWebExchange exchange, HttpStatus status, ApiResponse<?> response) {

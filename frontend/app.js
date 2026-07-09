@@ -34,10 +34,13 @@
     articleContent: $("articleContent"),
     createDraftBtn: $("createDraftBtn"),
     publishBtn: $("publishBtn"),
+    updateArticleBtn: $("updateArticleBtn"),
+    deleteArticleBtn: $("deleteArticleBtn"),
     refreshArticlesBtn: $("refreshArticlesBtn"),
     currentArticleBadge: $("currentArticleBadge"),
     currentArticleId: $("currentArticleId"),
     loadDetailBtn: $("loadDetailBtn"),
+    aiAnalysisBtn: $("aiAnalysisBtn"),
     articleDetail: $("articleDetail"),
     articleList: $("articleList"),
     likeBtn: $("likeBtn"),
@@ -52,6 +55,11 @@
     aiStreamBtn: $("aiStreamBtn"),
     aiStopBtn: $("aiStopBtn"),
     aiResult: $("aiResult"),
+    rateWindow: $("rateWindow"),
+    rateMax: $("rateMax"),
+    rateLoadBtn: $("rateLoadBtn"),
+    rateSetBtn: $("rateSetBtn"),
+    rateLimitDemoBtn: $("rateLimitDemoBtn"),
     clearLogBtn: $("clearLogBtn"),
     responseLog: $("responseLog"),
     toast: $("toast")
@@ -124,14 +132,30 @@
   async function api(path, options) {
     const opts = options || {};
     const hasBody = Object.prototype.hasOwnProperty.call(opts, "body");
-    const response = await fetch(`${state.baseUrl}${path}`, {
-      method: opts.method || "GET",
-      headers: {
-        ...headers(hasBody),
-        ...(opts.headers || {})
-      },
-      body: hasBody ? JSON.stringify(opts.body) : undefined
-    });
+    let response;
+    try {
+      response = await fetch(`${state.baseUrl}${path}`, {
+        method: opts.method || "GET",
+        headers: {
+          ...headers(hasBody),
+          ...(opts.headers || {})
+        },
+        body: hasBody ? JSON.stringify(opts.body) : undefined
+      });
+    } catch (error) {
+      const networkError = new Error("Network request failed");
+      networkError.payload = {
+        code: 0,
+        message: error.message || "Failed to fetch",
+        request: {
+          method: opts.method || "GET",
+          url: `${state.baseUrl}${path}`
+        },
+        hint: "请确认 Gateway 已启动、Base URL 正确；如果只有浏览器失败而 curl 正常，通常是 CORS/预检请求被拦截。"
+      };
+      networkError.status = 0;
+      throw networkError;
+    }
 
     const text = await response.text();
     let payload = null;
@@ -161,6 +185,7 @@
       return payload;
     } catch (error) {
       const payload = error.payload || {
+        code: error.status || 0,
         message: error.message || "请求失败",
         hint: "请确认后端服务和网关地址是否可用。"
       };
@@ -288,7 +313,7 @@
   }
 
   async function register() {
-    await run(els.registerBtn, "注册中", "POST /api/user/register", async () => {
+    const payload = await run(els.registerBtn, "注册中", "POST /api/user/register", async () => {
       return api("/api/user/register", {
         method: "POST",
         body: {
@@ -297,6 +322,9 @@
         }
       });
     });
+    if (payload && payload.code === 200) {
+      showToast("注册成功，可直接登录", "success");
+    }
   }
 
   async function login() {
@@ -366,9 +394,48 @@
   async function publishArticle() {
     const id = getCurrentArticleId();
     if (!id) return;
-    await run(els.publishBtn, "发布中", `POST /api/articles/${id}/publish`, async () => {
+    const payload = await run(els.publishBtn, "发布中", `POST /api/articles/${id}/publish`, async () => {
       return api(`/api/articles/${encodeURIComponent(id)}/publish`, { method: "POST" });
     });
+    if (payload) {
+      await refreshArticlesSilently();
+      await refreshRankingSilently();
+    }
+  }
+
+  async function updateArticle() {
+    const id = getCurrentArticleId();
+    if (!id) return;
+    const payload = await run(els.updateArticleBtn, "修改中", `PUT /api/articles/${id}`, async () => {
+      return api(`/api/articles/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: {
+          title: els.articleTitle.value.trim(),
+          summary: els.articleSummary.value.trim(),
+          content: els.articleContent.value.trim()
+        }
+      });
+    });
+    if (payload) {
+      await loadDetail();
+      await refreshArticlesSilently();
+    }
+  }
+
+  async function deleteArticle() {
+    const id = getCurrentArticleId();
+    if (!id) return;
+    const confirmed = window.confirm(`确认逻辑删除文章 #${id}？`);
+    if (!confirmed) return;
+    const payload = await run(els.deleteArticleBtn, "删除中", `DELETE /api/articles/${id}`, async () => {
+      return api(`/api/articles/${encodeURIComponent(id)}`, { method: "DELETE" });
+    });
+    if (payload) {
+      setCurrentArticleId("");
+      renderArticleDetail(null);
+      await refreshArticlesSilently();
+      await refreshRankingSilently();
+    }
   }
 
   async function refreshArticles() {
@@ -377,6 +444,39 @@
     });
     if (payload) {
       renderArticleList(payload.data);
+    }
+  }
+
+  async function refreshArticlesSilently() {
+    try {
+      const payload = await api("/api/articles/latest?page=1&size=10");
+      if (payload) {
+        renderArticleList(payload.data);
+      }
+    } catch (error) {
+      console.warn("Failed to refresh latest articles", error);
+    }
+  }
+
+  async function refreshCommentsSilently(id) {
+    try {
+      const payload = await api(`/api/articles/${encodeURIComponent(id)}/comments?page=1&size=10`);
+      if (payload) {
+        renderComments(payload.data);
+      }
+    } catch (error) {
+      console.warn("Failed to refresh comments", error);
+    }
+  }
+
+  async function refreshRankingSilently() {
+    try {
+      const payload = await api("/api/ranking/top10");
+      if (payload) {
+        renderRanking(payload.data);
+      }
+    } catch (error) {
+      console.warn("Failed to refresh ranking", error);
     }
   }
 
@@ -394,15 +494,19 @@
   async function likeArticle() {
     const id = getCurrentArticleId();
     if (!id) return;
-    await run(els.likeBtn, "点赞中", `POST /api/articles/${id}/like`, async () => {
+    const payload = await run(els.likeBtn, "点赞中", `POST /api/articles/${id}/like`, async () => {
       return api(`/api/articles/${encodeURIComponent(id)}/like`, { method: "POST" });
     });
+    if (payload) {
+      await refreshArticlesSilently();
+      await refreshRankingSilently();
+    }
   }
 
   async function postComment() {
     const id = getCurrentArticleId();
     if (!id) return;
-    await run(els.commentBtn, "提交中", `POST /api/articles/${id}/comments`, async () => {
+    const payload = await run(els.commentBtn, "提交中", `POST /api/articles/${id}/comments`, async () => {
       return api(`/api/articles/${encodeURIComponent(id)}/comments`, {
         method: "POST",
         body: {
@@ -410,6 +514,11 @@
         }
       });
     });
+    if (payload) {
+      await refreshArticlesSilently();
+      await refreshCommentsSilently(id);
+      await refreshRankingSilently();
+    }
   }
 
   async function loadComments() {
@@ -443,6 +552,51 @@
     if (payload && payload.data) {
       const model = payload.data.modelName ? `模型：${payload.data.modelName}\n\n` : "";
       setAiResult(`${model}${payload.data.content || ""}`, false);
+    }
+  }
+
+  async function loadAiAnalysis() {
+    const id = getCurrentArticleId();
+    if (!id) return;
+    const payload = await run(els.aiAnalysisBtn, "读取中", `GET /api/ai/articles/${id}/analysis`, async () => {
+      return api(`/api/ai/articles/${encodeURIComponent(id)}/analysis`);
+    });
+    if (payload) {
+      setAiResult(formatJson(payload.data || payload), false);
+    }
+  }
+
+  async function loadRateLimitConfig() {
+    const payload = await run(els.rateLoadBtn, "读取中", "GET /api/admin/rate-limit/article-detail", async () => {
+      return api("/api/admin/rate-limit/article-detail");
+    });
+    if (payload && payload.data) {
+      els.rateWindow.value = payload.data.windowSeconds ?? 10;
+      els.rateMax.value = payload.data.maxRequests ?? 20;
+    }
+  }
+
+  async function saveRateLimitConfig(maxRequestsOverride) {
+    const windowSeconds = Number(els.rateWindow.value || 10);
+    const maxRequests = Number(maxRequestsOverride || els.rateMax.value || 20);
+    const payload = await run(
+      maxRequestsOverride ? els.rateLimitDemoBtn : els.rateSetBtn,
+      "保存中",
+      "PUT /api/admin/rate-limit/article-detail",
+      async () => {
+        return api("/api/admin/rate-limit/article-detail", {
+          method: "PUT",
+          body: {
+            windowSeconds,
+            maxRequests,
+            enabled: true
+          }
+        });
+      }
+    );
+    if (payload && payload.data) {
+      els.rateWindow.value = payload.data.windowSeconds ?? windowSeconds;
+      els.rateMax.value = payload.data.maxRequests ?? maxRequests;
     }
   }
 
@@ -551,8 +705,11 @@
     els.profileBtn.addEventListener("click", profile);
     els.createDraftBtn.addEventListener("click", createDraft);
     els.publishBtn.addEventListener("click", publishArticle);
+    els.updateArticleBtn.addEventListener("click", updateArticle);
+    els.deleteArticleBtn.addEventListener("click", deleteArticle);
     els.refreshArticlesBtn.addEventListener("click", refreshArticles);
     els.loadDetailBtn.addEventListener("click", loadDetail);
+    els.aiAnalysisBtn.addEventListener("click", loadAiAnalysis);
     els.likeBtn.addEventListener("click", likeArticle);
     els.commentBtn.addEventListener("click", postComment);
     els.loadCommentsBtn.addEventListener("click", loadComments);
@@ -560,6 +717,9 @@
     els.aiContinueBtn.addEventListener("click", aiContinue);
     els.aiStreamBtn.addEventListener("click", aiStream);
     els.aiStopBtn.addEventListener("click", stopStream);
+    els.rateLoadBtn.addEventListener("click", loadRateLimitConfig);
+    els.rateSetBtn.addEventListener("click", () => saveRateLimitConfig());
+    els.rateLimitDemoBtn.addEventListener("click", () => saveRateLimitConfig(5));
     els.clearLogBtn.addEventListener("click", () => {
       els.responseLog.textContent = "等待请求...";
     });
@@ -575,6 +735,9 @@
 
   function init() {
     els.baseUrl.value = state.baseUrl;
+    if (els.username.value === "alice") {
+      els.username.value = `demo_${Date.now().toString().slice(-6)}`;
+    }
     updateAuthView();
     bindEvents();
   }

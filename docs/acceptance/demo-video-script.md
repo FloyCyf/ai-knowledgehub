@@ -1,468 +1,469 @@
-# AI-KnowledgeHub  5-Minute Demo Video Walkthrough
+﻿# AI-KnowledgeHub 最终验收视频分镜脚本
 
-> **任务编号**:题目三《基于 AI 的"智能知识库与内容发布"平台》
-> **总预算**:5 分钟以内(实际建议录制 4 分 40 秒,留 20 秒弹性)
-> **核心交付物**:录屏 mp4,对应指导书 Page 3-4 §3.2 之要求:"展示各个微服务和中间件的启动状态" + "演示主要业务链路的流转"
-> **录制建议工具**:OBS Studio 1080p30 / Windows Terminal + PowerShell
-
----
-
-## 0. 总览时间线
-
-| 时间码 | 分镜 | 主题 | 工具形态 |
-|---|---|---|---|
-| 0:00 - 0:25 | 1 | 启动总览:5 微服务 + 3 中间件 | 手动 |
-| 0:25 - 1:15 | 2 | 网关统一入口 + JWT 鉴权穿透 + admin 403 | `acceptance-gateway.ps1` 段 1 |
-| 1:15 - 1:55 | 3 | 文章发布 + MQ Fanout + AI 分析 + 涨分 | `acceptance-gateway.ps1` 段 2 + 手动补涨分 |
-| 1:55 - 2:25 | 4 | Redis ZSET 直击证据(数据真实持久化) | 手动 `redis-cli` + 跨校验 |
-| 2:25 - 3:10 | 5 | 网关动态限流触发 429 | `acceptance-gateway.ps1 -AdminToken` |
-| 3:10 - 3:55 | 6 | AI 续写(同步 + SSE 流式) | 手动 `curl` |
-| 3:55 - 4:10 | 7 | 收尾:关停服务 + 架构亮点口播 | 手动 |
-
-> 本脚本采用"自动化脚本触发 + 关键证据手动复现"的混合格式。自动化保证链接全打通、不漏步;手动保证最直观的证据(Redis ZSET、429、逐字 SSE)能被老师看清楚。
->
-> **录屏工程说明**:`acceptance-gateway.ps1` 一旦启动会顺次跑完所有 9 段(line 127-254),期间没有 stop-here 钩子。本脚本固定采用 **OBS 双 PowerShell 窗口并排录制**:左窗口跑脚本,右窗口做手动操作;两个窗口并行执行,OBS 一镜全收,左右画面同步呈现给老师。详见 `§3.8`。
-
----
-
-## 1. 前置准备(录屏前 5 分钟)
+本文档用于课程设计最终录屏。所有命令默认在项目根目录执行：
 
 ```powershell
-# (a) 切到 UTF-8 控制台,避免 PowerShell 中文乱码
+cd "D:\大三下作业\web后端\ai-knowledgehub"
 chcp 65001
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+```
 
-# (b) 启 Docker 三个中间件
+录屏核心原则：
+
+- 所有外部接口统一通过 `http://localhost:8080` Gateway 访问。
+- MySQL、Redis、RabbitMQ、Nacos 必须使用真实中间件。
+- 分镜中的 `[PASS]`、`UP`、`zset`、`429`、`data:` 等输出就是验收证据。
+
+---
+
+## 准备阶段：启动环境
+
+### 命令
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\stop-all-services.ps1
+
 docker compose up -d
+
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-# (c) 启 5 个 Java 服务(脚本会自动 mvn -DskipTests install 然后按
-#     user -> article -> ranking -> ai -> gateway 顺序拉起)
-powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1
+netstat -ano | Select-String ":6379.*LISTENING"
 
-# (d) 等服务起来后,确认五口在听
-netstat -ano | Select-String ":808[0-4].*LISTENING"
-curl.exe http://localhost:8080/actuator/health
+docker exec akh-redis redis-cli DEL article:hot:ranking
+
+powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1 -RankingUseRedis
 ```
 
-**期望**:`docker ps` 三行均 `Up ... (healthy)`,5 个端口全 LISTENING,`/actuator/health` 返回 `{"status":"UP"}`。
-
----
-
-## 2. 分镜逐稿
-
-### 分镜 1 / 启动总览(0:00 - 0:25)
-
-**目的**:满足指导书"展示各个微服务和中间件的启动状态"。
-
-**手动命令**(每条 3 秒,留 1-2 秒看输出):
-
-```powershell
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-```
+确认全服务：
 
 ```powershell
 netstat -ano | Select-String ":808[0-4].*LISTENING"
-```
 
-```powershell
 curl.exe http://localhost:8080/actuator/health
 ```
 
-**截图点 S1**:
+### 输出怎么看
 
-- S1-1:`akh-mysql / akh-redis / akh-rabbitmq` 三行 healthy
-- S1-2:5 个端口 LISTENING
-- S1-3:网关 UP
+- `docker ps` 中应看到 `akh-mysql`、`akh-redis`、`akh-rabbitmq`、`akh-nacos` 正在运行。
+- `netstat :6379` 应只保留 Docker 相关监听，避免本机 Redis 抢占端口。
+- `start-all-services.ps1 -RankingUseRedis` 会启动 5 个 Java 微服务，并强制 `ranking-service` 使用 Redis ZSET。
+- `netstat :808[0-4]` 应看到 `8080` 到 `8084` 全部 `LISTENING`。
+- `curl /actuator/health` 应返回：
 
-**口播稿**:**"系统为 5 个 Spring Boot 微服务(端口 8080-8084)+ 3 个中间件。MySQL 持久化,Redis ZSET 热榜 + 网关限流,RabbitMQ Fanout 异步广播,SSE 流式 AI。所有外部请求统一经 gateway-service 进入。"**
+```json
+{"status":"UP"}
+```
+
+### 对应验收点
+
+- 工具证明：真实 MySQL、Redis、RabbitMQ、Nacos、Gateway。
+- 工程化可复现：Docker Compose + PowerShell 脚本启动。
+- 架构要求：5 个微服务 + 统一网关入口。
 
 ---
 
-### 分镜 2 / 网关鉴权穿透(0:25 - 1:15)
+## 分镜 1：启动总览
 
-**目的**:印证"所有外部请求经 gateway-service 统一鉴权;JWT 解析覆盖伪造 X-User-* 头;普通用户访问 admin 接口 403"。
+### 命令
 
-**操作 — 直接跑 acceptance-gateway.ps1 不带 -AdminToken**:
+```powershell
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+netstat -ano | Select-String ":808[0-4].*LISTENING"
+
+curl.exe http://localhost:8080/actuator/health
+```
+
+### 讲述稿
+
+这一段展示系统完整运行环境。Docker 中运行 MySQL、Redis、RabbitMQ、Nacos 四类真实中间件，Java 侧运行 user、article、ranking、ai、gateway 五个微服务。最终入口是 `8080` 的 gateway-service，其他微服务只作为内部服务被网关转发。
+
+### 输出怎么看
+
+- `akh-mysql`：关系型数据库，用于用户、文章、评论、点赞等持久化。
+- `akh-redis`：用于热榜 ZSET、网关限流计数、Token 黑名单。
+- `akh-rabbitmq`：用于文章发布后的 Fanout 异步广播。
+- `akh-nacos`：用于动态下发网关限流配置。
+- `8080`：Gateway 统一入口。
+- `8081`：User Service。
+- `8082`：Article Service。
+- `8083`：Ranking Service。
+- `8084`：AI Service。
+- `{"status":"UP"}`：Gateway 和关键依赖均正常。
+
+### 对应验收点
+
+- 工具证明：真实关系型数据库、Redis、MQ、网关等中间件。
+- 系统总体设计：微服务拆分与统一入口。
+- 配置与部署：Docker Compose 和脚本化启动。
+
+---
+
+## 分镜 2：用户权限与 JWT
+
+### 命令
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 ```
 
-**脚本会跑到 line 254(无 -AdminToken,Rate limit check [SKIP])自动结束**。录像里只需要**关注前三段对应的 6 个 [PASS]**:
+### 讲述稿
 
-```
-==> Gateway health
+这一段验证用户权限体系。脚本会通过网关完成注册、登录，登录成功后获得 JWT。随后验证未登录访问受保护接口返回 401，携带 Token 可以访问 profile，并且即使客户端伪造 `X-User-Id`、`X-User-Role`，网关也会覆盖这些请求头，只信任 JWT 解析结果。最后验证注销后旧 Token 失效，以及普通用户访问管理员接口返回 403。
+
+### 重点输出
+
+```text
 [PASS] gateway health -> HTTP 200
-
-==> User register and login through gateway
 [PASS] register -> HTTP 200
 [PASS] login -> HTTP 200
-
-==> JWT protection and trusted gateway headers
 [PASS] profile without token -> HTTP 401
 [PASS] profile with token and forged headers -> HTTP 200
-
-==> Admin permission check with normal user token
+[PASS] logout -> HTTP 200
+[PASS] profile with logged-out token -> HTTP 401
 [PASS] normal user calls admin API -> HTTP 403
 ```
 
-**截图点 S2**:
+### 输出怎么看
 
-- S2-1:终端上 6 个 `[PASS]` 行(连成一片)
-- S2-2:同时显示 `Username` 自动注册成 `a_accept_<时间戳>`(临时用户)
-- S2-3:脚本运行结束后落地 JSON `docs/acceptance/runtime/last-gateway-acceptance.json`
+- `register/login HTTP 200`：用户注册登录链路正常。
+- `profile without token -> 401`：受保护接口需要认证。
+- `profile with token and forged headers -> 200`：网关解析 JWT 并覆盖伪造用户头。
+- `logged-out token -> 401`：注销后 Token 进入 Redis 黑名单，旧 Token 不再可用。
+- `admin API -> 403`：普通用户不能访问管理员接口。
 
-**口播稿**:**"我们让脚本以一个新注册用户走网关:`gateway health 200`、注册和登录 200、profile 不带 token 返回 401。**带 token 但请求头里塞了伪造的 X-User-Id=999999 时,网关的 `JwtAuthenticationFilter` 解析 JWT 后,会以解析结果为准,所以 profile 仍然 200,但响应里的 id 是这个**真实用户**的 id,不是 999999。最后,普通用户去 PUT `/api/admin/rate-limit/article-detail` 返回 403,这是 `AdminAuthorizationWebFilter` 在起作用 — 它专门守护挂在网关本地的管理员接口,因为这类接口不走 Spring Cloud Gateway 的 GlobalFilter。"**
+### 对应验收点
+
+- 基础支撑功能：注册、登录、注销。
+- 用户权限：普通用户和管理员角色区分。
+- JWT：Token 颁发、校验、失效。
+- Gateway：统一鉴权、可信用户信息透传。
 
 ---
 
-### 分镜 3 / 文章发布 + MQ + AI(1:15 - 1:55)
+## 分镜 3：文章 CRUD、评论点赞、RabbitMQ
 
-**目的**:题目三核心架构点 — "文章发布 → MQ Fanout → 多下游 AI 处理"。
+### 命令
 
-**⚠ 双窗口并排**:本分镜的"前半"在 OBS 左窗口(跑 acceptance),"后半"在 OBS 右窗口(手动涨分),两个窗口并行执行。
-
-#### 左窗口(录像中持续可见的脚本终端)
-
-`acceptance-gateway.ps1` 继续自动跑(line 172-214):
-
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 ```
-==> Article route through gateway
+
+可选打开 RabbitMQ 控制台：
+
+```powershell
+start http://localhost:15672
+```
+
+账号：
+
+```text
+guest / guest
+```
+
+### 讲述稿
+
+这一段继续使用主验收脚本，重点展示文章业务链路。脚本会创建文章草稿、发布文章、分页获取最新文章、修改文章、获取文章详情、逻辑删除文章，并验证删除后的文章详情不再作为成功结果返回。同时还会验证评论入库、点赞入库，以及文章发布后 RabbitMQ Fanout 队列收到处理证据。
+
+### 重点输出
+
+```text
 [PASS] create article draft -> HTTP 200
 [PASS] publish article -> HTTP 200
 [PASS] latest articles -> HTTP 200
+[PASS] update article -> HTTP 200
 [PASS] article detail -> HTTP 200
-
-==> Ranking and AI routes through gateway
-[PASS] ranking top10 -> HTTP 200
-[PASS] ai continue writing -> HTTP 200
-[PASS] ai sse stream -> HTTP 200
-[PASS] ai article analysis -> HTTP 200
+[PASS] article detail contains updated title
+[PASS] logical delete article -> HTTP 200
+[PASS] deleted article detail -> no success response
+[PASS] add comment -> HTTP 200
+[PASS] like article -> HTTP 200
+[PASS] RabbitMQ queue article.tag.queue
+[PASS] RabbitMQ queue article.audit.queue
 ```
 
-> 录取时这一段约 6-8 秒。Acceptance 会在第 13 个 [PASS] 后继续跑 Rate limit check([SKIP]),可直接 Ctrl+C 中止,JSON 已落地。
+### 输出怎么看
 
-#### 右窗口(同时进行的手动操作)
+- `create draft`：文章草稿创建成功。
+- `publish article`：文章从草稿变为发布状态。
+- `latest articles`：支持分页获取最新文章。
+- `update article` 和 `contains updated title`：修改后的标题能在详情中体现。
+- `logical delete`：删除接口成功执行逻辑删除。
+- `deleted article detail -> no success response`：已删除文章不会作为正常详情返回。
+- `add comment`：评论写入数据库。
+- `like article`：点赞写入数据库并更新统计。
+- RabbitMQ 两个队列：文章发布事件通过 Fanout 广播到独立消费者队列。
 
-```powershell
-chcp 65001
+### 对应验收点
 
-# (1) 自取一个新用户,不依赖左窗口的 session
-#     PS 5.1:单引号拼接字符串,不要 ConvertTo-Json 也不要反引号转义
-$ts   = Get-Date -Format "HHmmss"
-$uname = "demo_bump_$ts"
-$body = '{"username":"' + $uname + '","password":"123456"}'
-curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
-   "http://localhost:8080/api/user/register" | Out-Null
-$loginResp = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
-   "http://localhost:8080/api/user/login"
-$tok = ($loginResp | ConvertFrom-Json).data.token
-Write-Host ("bump token length = " + $tok.Length)
-
-# (2) 自创建 3 篇短文并发布,这样 Redis ZSET 自动得到 +2 热度
-1..3 | ForEach-Object {
-    $draft = curl.exe -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
-       -d '{"title":"ranking demo article","content":"ranking demo content"}' `
-       "http://localhost:8080/api/articles/draft"
-    $aid = ($draft | ConvertFrom-Json).data.articleId
-    $null = curl.exe -s -X POST -H "Authorization: Bearer $tok" `
-       ("http://localhost:8080/api/articles/" + $aid + "/publish")
-    Write-Host ("article " + $aid + " published")
-}
-
-# (3) 给第一篇点 2 个赞,加 1 条评论,加 1 次浏览
-$first = 1   # 接受"最近创建的是某个 ID"的事实,直接用 $latest
-$latest = curl.exe -s "http://localhost:8080/api/articles/latest"
-$aid = ($latest | ConvertFrom-Json).data.list[0].id
-1..2 | ForEach-Object {
-    $null = curl.exe -s -X POST -H "Authorization: Bearer $tok" `
-       ("http://localhost:8080/api/articles/" + $aid + "/like")
-}
-$null = curl.exe -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
-   -d '{"content":"good write-up"}' `
-   ("http://localhost:8080/api/articles/" + $aid + "/comments")
-$null = curl.exe -s -X POST -H "Authorization: Bearer $tok" `
-   ("http://localhost:8080/api/articles/" + $aid + "/view")
-Write-Host "score bumped"
-```
-
-**截图点 S3**:
-
-- S3-1:终端 8 个 `[PASS]` 后半段(line 172-214)
-- S3-2:涨分 3 行写入后(可读 `docs/acceptance/runtime/logs/ranking-service.out.log` 看到 `文章 N 热度更新(Redis)` 三条)
-- S3-3:同时打开 `http://localhost:15672`(RabbitMQ Management,Guest/Guest),能看到 `article.tag.queue` 与 `article.audit.queue` 各收到一条消息(Visual evidence)
-- S3-4:`/api/ai/articles/{id}/analysis` 返回的 JSON,`data.tags` 与 `data.audit` 都有内容
-
-**口播稿**:**"现在这篇文章被发布,脚本里我们看到 article-service 把状态切到 PUBLISHED、ranking 同步 +2 热度、并向 RabbitMQ 投递了一条消息。接下来我在 RabbitMQ Management 后台 — `article.tag.queue` 是 AI 标签消费者在监听,`article.audit.queue` 是 AI 合规检测消费者在监听。两条队列独立处理同一篇文章。最后 `ai-service` 把标签和合规检测结果写回 `article_ai_tag` 和 `article_audit_result` 表,我们查询 `/api/ai/articles/{id}/analysis` 拿到这两份结果。"**
+- 基础支撑功能：文章创建、发布、修改、逻辑删除、分页列表、详情查询。
+- 互动基础功能：评论入库、单次点赞更新数据库。
+- 核心架构功能：长文发布后投递 RabbitMQ，Fanout 广播给多个下游处理逻辑。
+- 工具证明：RabbitMQ 使用真实队列。
 
 ---
 
-### 分镜 4 / Redis ZSET 直击证据(1:55 - 2:25)
+## 分镜 4：Redis ZSET 热榜
 
-**目的**:这是题目三最直观的 Redis 证据,让 ZSET 看得到摸得着。
-
-**操作 — 全部手动**:
+### 命令
 
 ```powershell
-# (1) HTTP 接口读 top10
-$top = curl.exe -s "http://localhost:8080/api/ranking/top10"
-$topObj  = $top | ConvertFrom-Json
-$top | ConvertFrom-Json | ConvertTo-Json -Depth 5
+docker exec akh-redis redis-cli DEL article:hot:ranking
 
-# (2) redis-cli 直读 ZSET(三条命令分开执行,演示更清楚)
-Write-Host "---- TYPE ----"
-redis-cli -h localhost TYPE  article:hot:ranking
-Write-Host "---- ZCARD ----"
-redis-cli -h localhost ZCARD article:hot:ranking
-Write-Host "---- ZREVRANGE 0 9 WITHSCORES ----"
-redis-cli -h localhost ZREVRANGE article:hot:ranking 0 9 WITHSCORES
-
-# (3) 跨校验:HTTP data.total == Redis ZCARD
-$card = (redis-cli -h localhost ZCARD article:hot:ranking) -as [int]
-Write-Host ("")
-Write-Host ("HTTP data.total = " + $topObj.data.total + "   Redis ZCARD = " + $card)
-if ($topObj.data.total -eq $card) { "MATCH (Redis ZSET 是热榜唯一数据源)" } else { "DIFF" }
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-redis-ranking.ps1
 ```
 
-**截图点 S4**:
+可选手动展示 Redis 原始数据：
 
-- S4-1:HTTP 接口 data.total=N,articles 按 hotScore 倒序
-- S4-2:`TYPE` 返回 `zset`
-- S4-3:`ZREVRANGE 0 9 WITHSCORES` 输出 — 真实在 Redis 里的 ZSET 持久化数据
-- S4-4:终端最后输出 `MATCH (Redis ZSET 是热榜唯一数据源)`
+```powershell
+docker exec akh-redis redis-cli TYPE article:hot:ranking
 
-**口播稿**:**"现在打开 redis-cli 直接打 `article:hot:ranking` 这个 key:`TYPE` 是 `zset`,`ZCARD` 等于 N,`ZREVRANGE` 把所有 articleId 和分数倒序列出来 — 这是 Redis 内部的真实持久化数据。HTTP 接口的 `data.total` 与 `ZCARD` 完全相等,说明我们**没有写两套数据**,Redis ZSET 就是热榜的唯一数据源。每篇文章的 view +1、publish +2、comment +3、like +5 通过 `ZINCRBY` 写进来,Top10 通过 `ZREVRANGE 0 9 WITHSCORES` 拿出去,这就是 Redis ZSET 的标准用法。"**
+docker exec akh-redis redis-cli ZCARD article:hot:ranking
 
-> 文字证据同时落到 `docs/acceptance/ranking/b-redis-zset-evidence.txt`,本分镜与该 txt 一一对应。
-
-### 3.1 双窗口 OBS 配置指引
-
-```
-+-------------------------------------------+-------------------------------------------+
-| OBS 场景 1:PowerShell-A(左 50%)          | OBS 场景 1:PowerShell-B(右 50%)          |
-| (跑 acceptance-gateway.ps1)               | (手动 redis-cli / curl)                   |
-|                                           |                                           |
-| chcp 65001                                | chcp 65001                                |
-| powershell -ExecutionPolicy Bypass \      | $ts = Get-Date -Format "HHmmss"           |
-|   -File scripts\acceptance-gateway.ps1    | $body = "{...}"                            |
-|                                           | $tok = curl ...                          |
-| ==> Gateway health                        |   ...                                     |
-| [PASS] gateway health -> HTTP 200         |                                           |
-| [PASS] register -> HTTP 200               |                                           |
-| ...                                       |                                           |
-| Acceptance finished.                      |                                           |
-+-------------------------------------------+-------------------------------------------+
-                 OBS 1080p30 一次性录完全部 5 分钟
+docker exec akh-redis redis-cli ZREVRANGE article:hot:ranking 0 9 WITHSCORES
 ```
 
-**OBS 操作要点**:
-- 新建"Display Capture"或"Window Capture" → 选 PowerShell 窗口
-- 调整"Position + Size"把第一个窗口放左半屏、第二个窗口放右半屏
-- 添加"Text (GDI+)"图层覆盖底部,展示当前分镜编号和口播要点
-- 录制时按"开始录制" → 中间任何时刻都不要切换窗口或切桌面(OBS 中止)
+### 讲述稿
 
-**Window Capture 的兼容性**:PowerShell 5.1 默认窗口标题是 `Administrator: Windows PowerShell`,便于 OBS 锁定窗口。Windows Terminal 标题更短(推荐)。
+这一段验证实时热榜。脚本先清空本轮演示用的热榜 key，然后通过 Gateway 调用 ranking-service 的加分接口，模拟文章发布、阅读、点赞、评论带来的热度变化。随后脚本分别读取 HTTP Top10 接口和 Docker Redis 容器中的 `article:hot:ranking` ZSET，逐项比较文章 ID 和热度分数。
+
+### 重点输出
+
+```text
+[PASS] ranking demo user logged in through gateway
+[PASS] ranking demo scores submitted through gateway
+TYPE article:hot:ranking = zset
+ZCARD article:hot:ranking = 2
+ZREVRANGE article:hot:ranking 0 9 WITHSCORES:
+9101
+8
+9102
+5
+HTTP data.total = 2   Redis ZCARD = 2   Redis top count = 2
+[PASS] HTTP Top10 matches Redis ZSET article:hot:ranking
+```
+
+### 输出怎么看
+
+- `TYPE = zset`：Redis key 类型确实是 Sorted Set。
+- `ZCARD = 2`：当前热榜里有 2 篇演示文章。
+- `9101 8`：文章 9101 的热度分数为 8，来自 publish + view + like。
+- `9102 5`：文章 9102 的热度分数为 5，来自 publish + comment。
+- `HTTP Top10 matches Redis ZSET`：HTTP 接口返回的数据与 Redis 内部 ZSET 完全一致。
+
+### 对应验收点
+
+- 核心架构功能：文章实时热搜榜。
+- Redis 技术点：使用 ZSET 维护热度分数和 Top10 排名。
+- 工具证明：直接进入 Docker Redis 容器读取真实 ZSET 数据。
 
 ---
 
-### 分镜 5 / 网关动态限流 429(2:25 - 3:10)
+## 分镜 5：Nacos 动态限流
 
-**目的**:印证"网关层动态下发限流策略,无需重启服务"。
-
-**步骤 A — 准备 ADMIN token**(分镜 5 开始前一次性准备):
+### 命令
 
 ```powershell
-# (A1) 把历史账户 a_accept_20260705190800 提为 ADMIN
-docker exec akh-mysql mysql -uroot -p${MYSQL_ROOT_PASSWORD:-} user_db -e "
-  UPDATE user SET role='ADMIN' WHERE username='a_accept_20260705190800';
-  SELECT id, username, role FROM user WHERE role='ADMIN';
-" 2>&1 | Out-File "last-h2-promote.txt"
+$adminBody = '{"username":"admin_demo","password":"123456"}'
 
-# (A2) 登录这个 admin 用户拿 admin token(用 curl.exe 避免 PS hashtable 坑)
-$adminBody = '{"username":"a_accept_20260705190800","password":"123456"}'
-$adminResp = curl.exe -s -X POST -H "Content-Type: application/json" -d $adminBody `
-   "http://localhost:8080/api/user/login"
-$adminToken = ($adminResp | ConvertFrom-Json).data.token
+$adminResp = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/user/login" -ContentType "application/json" -Body $adminBody
+
+$adminToken = $adminResp.data.token
+
 Write-Host ("admin token length = " + $adminToken.Length)
+
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-nacos-rate-limit.ps1 -AdminToken $adminToken
 ```
 
-**步骤 B — 跑带 -AdminToken 的脚本**:
+可选打开 Nacos 控制台：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1 -AdminToken $adminToken
+start http://localhost:8848/nacos
 ```
 
-**这次脚本不会重新注册用户**(会发现 register 已存在或者 username 时间戳仍然新增),但关键是最后两段(限流相关)会跑:
+控制台中查看：
 
+```text
+dataId: gateway-service.yml
+group: DEFAULT_GROUP
 ```
-==> Rate limit check
-[PASS] admin updates rate limit to 5 -> HTTP 200
+
+### 讲述稿
+
+这一段验证动态网关限流。首先使用内置管理员账号 `admin_demo` 登录，获得管理员 Token。脚本随后创建一篇用于限流测试的文章，并通过管理员接口把文章详情限流配置发布到 Nacos，把 `maxRequests` 临时改为 5。脚本不会立刻只读一次 Nacos，而是最多等待 12 秒轮询，避免 Nacos 短暂延迟造成误判。配置下发后，Gateway 无需重启即可刷新配置。随后脚本连续访问文章详情，第 6 次左右触发 `429 Too Many Requests`，最后恢复默认限流配置 `maxRequests=20`。
+
+### 重点输出
+
+```text
+admin token length = 339
+[PASS] admin publishes Nacos rate limit to 5 -> HTTP 200
+waiting Nacos config 1/12 ...
+[PASS] Nacos config contains max-requests: 5
+[PASS] gateway refreshed Nacos config: "maxRequests":5
 rate-limit request 1 -> HTTP 200
 rate-limit request 2 -> HTTP 200
 rate-limit request 3 -> HTTP 200
 rate-limit request 4 -> HTTP 200
 rate-limit request 5 -> HTTP 200
 rate-limit request 6 -> HTTP 429
-[PASS] rate limit returned 429
-[PASS] restore default rate limit -> HTTP 200
-
-Acceptance finished. Runtime record: docs\acceptance\runtime\last-gateway-acceptance.json
+[PASS] Nacos dynamic rate limit returned 429
+[PASS] restore default Nacos rate limit -> HTTP 200
+[PASS] gateway refreshed Nacos config: "maxRequests":20
 ```
 
-**截图点 S5**:
+### 输出怎么看
 
-- S5-1:`admin updates rate limit to 5 -> HTTP 200`
-- S5-2:`rate-limit request 1..5 -> HTTP 200`,然后 `rate-limit request 6 -> HTTP 429`
-- S5-3:`[PASS] rate limit returned 429`
-- S5-4:末尾 `Acceptance finished.`,且 JSON 摘要里 `adminRateLimitVerified=true`
+- `admin token length`：管理员登录成功并获得 JWT。
+- `admin publishes Nacos rate limit to 5`：管理员接口成功发布限流配置。
+- `waiting Nacos config`：脚本正在等待 Nacos 配置中心完成写入/读取同步，这是正常现象。
+- `Nacos config contains max-requests: 5`：Nacos 中的 `gateway-service.yml` 已经变为新限流值。
+- `gateway refreshed ... "maxRequests":5`：Gateway 已经热刷新到新配置，无需重启。
+- `HTTP 429`：限流生效，超过阈值的文章详情请求被网关拒绝。
+- `restore default ... maxRequests:20`：演示后恢复默认限流配置，避免影响后续测试。
 
-**口播稿**:**"现在我们让管理员把文章详情接口的限流阈值调成 5:看到 200。然后连续请求 6 次同一个文章详情接口,前 5 次是 200,第 6 次是 429 — 限流触发。然后我们再调回默认值。这就是动态下发限流:不需要重启 gateway-service、不需要修改配置文件,网关的 `RateLimitAdminController` 直接生效。"**
+### 对应验收点
+
+- 核心架构功能：动态网关限流。
+- 配置中心要求：限流参数由 Nacos 动态下发，而不是写死在代码里。
+- 管理员权限：只有 ADMIN Token 可以修改限流配置。
+- Gateway 能力：无需重启即可刷新限流配置。
+- Redis 能力：Redis 只用于限流计数，Nacos 负责配置源。
 
 ---
 
-### 分镜 6 / AI 续写 + SSE 流式(3:10 - 3:55)
+## 分镜 6：AI 续写与 SSE 流式输出
 
-**目的**:印证"AI 续写采用 SSE 流式响应,逐字/逐句推送给客户端"。
-
-**操作 — 全手动 curl**,因为 acceptance-gateway.ps1 里面 SSE 是脚本执行看不到"逐字"效果的:
+### 命令：注册并登录 AI 演示用户
 
 ```powershell
-# 重新拿一个普通用户 token
-$body = '{"username":"a_accept_' + (Get-Date -Format "HHmmss") + '","password":"123456"}'
-$regBody = $body   # 注册一次,等下也用
-$login   = curl.exe -s -X POST -H "Content-Type: application/json" -d $body `
-   "http://localhost:8080/api/user/login"
-$tok = ($login | ConvertFrom-Json).data.token
-Write-Host ("token length = " + $tok.Length)
+$ts = Get-Date -Format "HHmmss"
+$uname = "demo_ai_$ts"
+$aiBody = '{"username":"' + $uname + '","password":"123456"}'
 
-# (1) 同步续写 — 一次性返回完整文本
-$sync = curl.exe -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" `
-   -d '{"prompt":"请写一段 Redis ZSET 的优势"}' `
-   "http://localhost:8080/api/continue-writing"
-# ↑ 注意:这里 URL 应该是 /api/ai/continue-writing,见下方修正
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/user/register" -ContentType "application/json" -Body $aiBody | Out-Null
+
+$loginResp = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/user/login" -ContentType "application/json" -Body $aiBody
+
+$tok = $loginResp.data.token
 ```
 
-> 上面的 URL 是笔误,正确命令如下:
+### 命令：普通续写
 
 ```powershell
-# 同步:POST /api/ai/continue-writing
-$sync = curl.exe -s -X POST `
-   -H "Authorization: Bearer $tok" `
-   -H "Content-Type: application/json" `
-   -d '{"prompt":"请写一段 Redis ZSET 的优势"}' `
-   "http://localhost:8080/api/ai/continue-writing"
-Write-Host $sync
+$sync = curl.exe -s -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" -d '{"prompt":"请写一段 Redis ZSET 的优势"}' "http://localhost:8080/api/ai/continue-writing"
 
-# 流式:GET /api/ai/continue-writing/stream?prompt=...
-$promptUtf8 = [System.Web.HttpUtility]::UrlEncode("请写一段Redis ZSET的优势")
-curl.exe -sN -H ("Authorization: Bearer " + $tok) `
-   ("http://localhost:8080/api/ai/continue-writing/stream?prompt=" + $promptUtf8)
+$sync | ConvertFrom-Json | ConvertTo-Json -Depth 5
 ```
 
-**截图点 S6**:
+### 命令：SSE 流式续写
 
-- S6-1:同步接口一次性返回的 JSON,`data.text` 是完整 Vo
-- S6-2:**最关键的画面**:SSE 流式输出 — 终端滚动出现 **多个** `data: <chunk>` 帧,每帧间隔约 100ms,直到最后连接关闭
-- S6-3(可选):录屏时同步打开浏览器或 Postman 调同一 SSE URL,客户端的"逐字增长"动画比终端更直观
+```powershell
+Add-Type -AssemblyName System.Web
 
-**口播稿**:**"我们调 `/api/ai/continue-writing` 看同步响应,一次性把整段续写完。然后调 SSE 端点 `/api/ai/continue-writing/stream` — 你看到这个终端里 `data:` 一行一行地弹出,每行就是一段 chunk,服务端用 `SseEmitter` 异步分段推,~100ms 一个。客户端不需要轮询,服务端的每一段都实时吐给客户端,这正是现代 AI 产品的交互体验。本项目用 Mock LLM 演示,真实接入只要替换 `AiService` 内部生成即可。"**
+$promptUtf8 = [System.Web.HttpUtility]::UrlEncode("请写一段 Redis ZSET 的优势")
+
+curl.exe -sN -H ("Authorization: Bearer " + $tok) ("http://localhost:8080/api/ai/continue-writing/stream?prompt=" + $promptUtf8)
+```
+
+### 讲述稿
+
+这一段验证 AI 创作辅助。普通续写接口会一次性返回完整文本，适合普通 API 调用；SSE 流式续写接口会持续输出多帧 `data:`，模拟 AI 生成内容逐步推送给客户端。所有请求仍然带 JWT 并通过 Gateway 访问。
+
+### 重点输出
+
+```text
+{
+  "code": 200,
+  "data": ...
+}
+
+data: ...
+data: ...
+data: ...
+```
+
+### 输出怎么看
+
+- 普通续写返回 `code=200`：AI 同步续写接口正常。
+- SSE 输出多行 `data:`：服务端通过 Server-Sent Events 流式推送内容。
+- `curl -sN`：禁用缓冲，便于看到流式帧持续输出。
+
+### 对应验收点
+
+- 核心架构功能：AI 流式创作辅助。
+- SSE 技术点：Server-Sent Events 持续推送。
+- Gateway 和 JWT：AI 接口同样经过统一入口和鉴权。
 
 ---
 
-### 分镜 7 / 收尾(3:55 - 4:10)
+## 分镜 7：收尾
 
-**操作**:
+### 命令
 
 ```powershell
+Get-Content docs\acceptance\runtime\last-gateway-acceptance.json -Tail 80
+
 powershell -ExecutionPolicy Bypass -File scripts\stop-all-services.ps1
-docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
-**截图点 S7**:`Services stopped.` 的终端输出,以及 `docker ps` 还显示 3 个中间件 healthy(中间件不关)。
-
-**口播稿(15 秒)**:**"系统架构:5 个微服务 + 3 个中间件;网关统一入口;Redis ZSET 热榜 + 网关动态限流;RabbitMQ Fanout 文章广播;SSE AI 流式续写。指导书要求的三条核心考核链路(网关鉴权、Redis ZSET 热榜、MQ 异步广播、AI 流式响应)都在 5 分钟里走完。运行时证据见 `docs/acceptance/runtime/last-gateway-acceptance.json`,运行时 ZSET 文本证据见 `docs/acceptance/ranking/b-redis-zset-evidence.txt`。完整 Postman 集合在 `postman/AI-KnowledgeHub.postman_collection.json`,源码与脚本在 origin/main。"**
-
----
-
-## 3. 录屏要点(避免翻车)
-
-| 坑 | 应对 |
-|---|---|
-| PowerShell 中文乱码 | 录屏前先 `chcp 65001`;中文字符串保持用反引号转义(`\"`)而非英文双引号 |
-| Invoke-RestMethod -Headers hashtable 偶尔丢 Authorization 头 | **本脚本凡是发 HTTP,统一用 curl**(Windows 10+ 自带),除非必须才用 Invoke-RestMethod |
-| 录到一半 Redis 挂了 | 录前 `docker ps` 三行 healthy;若 429 不触发则 `docker restart akh-redis` |
-| 流式 SSE 看不出"逐字"效果 | 同时用浏览器或 Postman 打开 SSE URL,客户端的"逐字增长"动画比终端直观 |
-| articleId 涨到 7、8、9 演示草稿时拿不到 1 | 接受这个事实,用最新返回的 `data.articleId` 即可,不影响演示连续性 |
-| 上一个 PS session 的 `$login` / `$token` 残留导致错误码 | **新开 PowerShell 窗口**,完全干净 session,只跑本脚本命令 |
-| `MYSQL_ROOT_PASSWORD` 变量不存在 | `.env.example` 默认空,所以 `${MYSQL_ROOT_PASSWORD:-}` 会用空串连接,直接 `docker exec akh-mysql mysql -uroot user_db` 也行 |
-| **acceptance-gateway.ps1 一旦启动会顺次跑完所有 9 段、无法中断** | OBS 起双 PowerShell 窗口并排录制:**左窗口跑 `acceptance-gateway.ps1`、右窗口做手动操作**,两个窗口并行。具体在分镜 3 / 4 / 5 都有体现 |
-| **`curl` 在 PowerShell 5.1 里是 `Invoke-WebRequest` 的别名** | 文档里所有 `curl` 实际指 `curl.exe`(Windows 10 1803+ 自带)。`curl -H "..."`(无 .exe 后缀)会被 alias 解成 `Invoke-WebRequest -Headers`(期望 hashtable),从而报"无法将 System.String 转换为 IDictionary"。**所有 HTTP 调用显式写 `curl.exe`** |
-| **PS 5.1 反引号 JSON 和 `ConvertTo-Json` 输出传给 `curl.exe -d` 都可能引入非法字节** | 反引号转义被 tokenizer 错位;`ConvertTo-Json -Compress` 输出在传给外部命令时 PS 5.1 可能附加 BOM/编码。**凡是 JSON body 含 `$变量` 插值,统一用单引号字符串拼接**: `'{"key":"' + $var + '"}'`。纯常量 JSON 用单引号 `'{"key":"val"}'` 仍然安全 |
-
----
-
-## 4. 关键截图清单
-
-| # | 必截内容 | 落盘路径(可选) |
-|---|---|---|
-| S1 | 3 个中间件 healthy + 5 个端口 LISTENING | 录屏自带 |
-| S2 | 6 个 [PASS] (网关 / 注册 / 登录 / 401 / 200 / 403) | 录屏自带 |
-| S3 | 8 个 [PASS] (article + AI) + RabbitMQ Management 后台画面 | `docs/screenshots/acceptance/7-mq-management.png` |
-| S4 | redis-cli ZREVRANGE + HTTP data.total 一致 | `docs/screenshots/acceptance/8-redis-zset.png` |
-| S5 | rate-limit request 1..6 + 429 + 恢复 | `docs/screenshots/acceptance/9-rate-limit-429.png` |
-| S6 | SSE 流式 5+ 个 `data:` 帧 | 录屏特写 |
-| S7 | Services stopped + clean desktop | 录屏自带 |
-
----
-
-## 5. 重置 / 重跑流程(录像中途出错时)
+如果最终要关闭中间件：
 
 ```powershell
-# (1) 清场:停 5 个 Java 服务
-powershell -ExecutionPolicy Bypass -File scripts\stop-all-services.ps1
-
-# (2) 重启
-powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1
-
-# (3) 若 Redis 容器出问题
-docker restart akh-redis
-
-# (4) 若 article.id 已经涨到很大,想从 1 开始
-docker exec akh-mysql mysql -uroot user_db -e "TRUNCATE article;"
-
-# (5) 清掉 JWT 黑名单 + 限流配置
-redis-cli -h localhost FLUSHDB
+docker compose down
 ```
+
+### 讲述稿
+
+最后展示验收脚本的运行记录，并停止 Java 微服务。中间件可以保留，方便老师或助教继续复查；如果需要完全释放环境，再执行 `docker compose down`。
+
+### 输出怎么看
+
+- `last-gateway-acceptance.json`：记录最近一次网关验收的接口结果。
+- `stop-all-services.ps1`：停止 5 个 Java 微服务。
+- `docker compose down`：关闭 MySQL、Redis、RabbitMQ、Nacos 等中间件。
+
+### 对应验收点
+
+- 工程化验收：脚本有记录、可复现。
+- 提交材料：验收结果可写入报告或作为截图依据。
 
 ---
 
-## 6. 与现有素材的对应
+## 附：API 文档与 Postman 验收材料
 
-| 现有资产 | 在本脚本中的角色 |
-|---|---|
-| `scripts/acceptance-gateway.ps1` | 分镜 2、3、5 的核心触发器 |
-| `scripts/start-all-services.ps1` / `stop-all-services.ps1` | 分镜 0、分镜 7 开关 |
-| `docs/acceptance/A-gateway-unified-entry-acceptance.md` | A 撰写的英文验收指南,本脚本是其视频版本 |
-| `docs/acceptance/runtime/last-gateway-acceptance.json` | acceptance-gateway.ps1 落地的 JSON,视频录制后引用即可 |
-| `docs/acceptance/ranking/b-redis-zset-evidence.txt` | 分镜 4 的文字证据,与录屏一对一 |
-| `postman/AI-KnowledgeHub.postman_collection.json` | 视频外,给老师/助教复习用 |
-| `Web后端-AI-KnowledgeHub-课程设计报告.md` §3.4 / §6.3 / §9.4.3 | 报告章节与本视频一一对应 |
+### Swagger / OpenAPI
 
----
+启动服务后访问：
 
-## 7. 录屏前最后一次自检清单
-
-```
-[ ] docker ps 三行 healthy
-[ ] 5 个 Java 端口 LISTENING
-[ ] curl.exe /actuator/health 200
-[ ] acceptance-gateway.ps1(不带 -AdminToken)13 个 PASS,1 个 SKIP
-[ ] acceptance-gateway.ps1 -AdminToken <token> 全 17 个 PASS,无 SKIP
-[ ] redis-cli ZREVRANGE article:hot:ranking 0 9 WITHSCORES 有输出
-[ ] curl.exe /api/ai/continue-writing/stream?prompt=... 出现至少 3 个 data: 帧
-[ ] OBS 场景已切到 PowerShell 终端
-[ ] 输出窗口最大化和 UTF-8(chcp 65001)
-[ ] 音频设备 OK
+```text
+http://localhost:8081/doc.html
+http://localhost:8082/doc.html
+http://localhost:8083/doc.html
+http://localhost:8084/doc.html
 ```
 
-全部打钩,开始录制。
+OpenAPI JSON：
+
+```text
+http://localhost:8081/v3/api-docs
+http://localhost:8082/v3/api-docs
+http://localhost:8083/v3/api-docs
+http://localhost:8084/v3/api-docs
+```
+
+### Postman Collection
+
+推荐提交和导入：
+
+```text
+postman/AI-KnowledgeHub-Gateway-Acceptance.postman_collection.json
+```
+
+说明：
+
+- 全部请求默认通过 `http://localhost:8080` Gateway。
+- 集合内包含健康检查、注册登录、JWT、文章、评论点赞、热榜、AI、管理员限流等核心链路。
+- 导入 Postman 后按顺序运行即可验证核心业务流程。
+
+

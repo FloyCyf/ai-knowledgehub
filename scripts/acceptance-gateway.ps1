@@ -3,6 +3,8 @@ param(
     [string]$AdminToken = "",
     [long]$ArticleId = 0,
     [string]$OutputDir = "docs/acceptance/runtime",
+    [string]$NacosUrl = "http://localhost:8848",
+    [string]$RabbitMqUrl = "http://localhost:15672",
     [switch]$SkipRateLimit
 )
 
@@ -101,6 +103,24 @@ function Assert-Status {
     }
 }
 
+function Assert-ApiCodeNotSuccess {
+    param(
+        [string]$Name,
+        [object]$Response
+    )
+    $code = $null
+    if ($Response.Json -and $Response.Json.code) {
+        $code = [int]$Response.Json.code
+    }
+    if ($Response.Status -ne 200 -or ($null -ne $code -and $code -ne 200)) {
+        Write-Host "[PASS] $Name -> unavailable after delete" -ForegroundColor Green
+    } else {
+        Write-Host "[FAIL] $Name -> still returned success" -ForegroundColor Red
+        Write-Host $Response.Content
+        throw "$Name failed"
+    }
+}
+
 function Get-Token {
     param([object]$LoginResponse)
     if ($LoginResponse.Json -and $LoginResponse.Json.data -and $LoginResponse.Json.data.token) {
@@ -115,6 +135,55 @@ function Get-ArticleId {
         return [long]$DraftResponse.Json.data.articleId
     }
     throw "Draft response does not contain data.articleId"
+}
+
+function Get-NacosConfigContent {
+    param(
+        [string]$Base,
+        [string]$DataId = "gateway-service.yml",
+        [string]$Group = "DEFAULT_GROUP"
+    )
+    $url = "$($Base.TrimEnd('/'))/nacos/v1/cs/configs?dataId=$([System.Uri]::EscapeDataString($DataId))&group=$([System.Uri]::EscapeDataString($Group))"
+    $response = Invoke-AkhHttp -Method GET -Url $url
+    return $response.Content
+}
+
+function Wait-RateLimitConfig {
+    param(
+        [string]$ExpectedText,
+        [string]$Base,
+        [hashtable]$Headers
+    )
+    for ($i = 1; $i -le 12; $i++) {
+        Start-Sleep -Seconds 1
+        $current = Invoke-AkhHttp -Method GET -Url "$Base/api/admin/rate-limit/article-detail" -Headers $Headers
+        if ($current.Content -like "*$ExpectedText*") {
+            Write-Host "[PASS] gateway refreshed Nacos config: $ExpectedText" -ForegroundColor Green
+            return
+        }
+        Write-Host "waiting gateway Nacos refresh $i/12 ..."
+    }
+    throw "Gateway did not refresh Nacos config: $ExpectedText"
+}
+
+function Get-RabbitQueueEvidence {
+    param(
+        [string]$Base,
+        [string]$Queue
+    )
+    try {
+        $pair = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("guest:guest"))
+        $headers = @{ Authorization = "Basic $pair" }
+        $queueName = [System.Uri]::EscapeDataString($Queue)
+        $response = Invoke-AkhHttp -Method GET -Url "$($Base.TrimEnd('/'))/api/queues/%2F/$queueName" -Headers $headers
+        if ($response.Json) {
+            Write-Host "[PASS] RabbitMQ queue $Queue -> messages=$($response.Json.messages), consumers=$($response.Json.consumers)" -ForegroundColor Green
+        }
+        return $response
+    } catch {
+        Write-Host "[WARN] RabbitMQ management evidence unavailable for $Queue`: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $null
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
@@ -160,6 +229,30 @@ $profile = Invoke-AkhHttp -Method GET -Url "$BaseUrl/api/user/profile" -Headers 
 $results.Add($profile)
 Assert-Status "profile with token and forged headers" $profile @(200)
 
+Write-Step "Logout invalidates old token"
+$logoutUsername = "a_logout_$timestamp"
+$logoutRegister = Invoke-AkhHttp -Method POST -Url "$BaseUrl/api/user/register" -Body @{
+    username = $logoutUsername
+    password = $password
+}
+$results.Add($logoutRegister)
+Assert-Status "logout user register" $logoutRegister @(200)
+
+$logoutLogin = Invoke-AkhHttp -Method POST -Url "$BaseUrl/api/user/login" -Body @{
+    username = $logoutUsername
+    password = $password
+}
+$results.Add($logoutLogin)
+Assert-Status "logout user login" $logoutLogin @(200)
+$logoutToken = Get-Token $logoutLogin
+$logoutAuth = @{ "Authorization" = "Bearer $logoutToken" }
+$logout = Invoke-AkhHttp -Method POST -Url "$BaseUrl/api/user/logout" -Headers $logoutAuth
+$results.Add($logout)
+Assert-Status "logout" $logout @(200)
+$profileAfterLogout = Invoke-AkhHttp -Method GET -Url "$BaseUrl/api/user/profile" -Headers $logoutAuth
+$results.Add($profileAfterLogout)
+Assert-Status "profile with logged-out token" $profileAfterLogout @(401)
+
 Write-Step "Admin permission check with normal user token"
 $adminForbidden = Invoke-AkhHttp -Method PUT -Url "$BaseUrl/api/admin/rate-limit/article-detail" -Headers $userAuth -Body @{
     windowSeconds = 10
@@ -189,9 +282,37 @@ $latest = Invoke-AkhHttp -Method GET -Url "$BaseUrl/api/articles/latest"
 $results.Add($latest)
 Assert-Status "latest articles" $latest @(200)
 
+$updateTitle = "Gateway acceptance article updated $timestamp"
+$update = Invoke-AkhHttp -Method PUT -Url "$BaseUrl/api/articles/$ArticleId" -Headers $userAuth -Body @{
+    title = $updateTitle
+    content = "This article was updated by scripts/acceptance-gateway.ps1."
+    summary = "Gateway acceptance updated"
+}
+$results.Add($update)
+Assert-Status "update article" $update @(200)
+
 $detail = Invoke-AkhHttp -Method GET -Url "$BaseUrl/api/articles/$ArticleId"
 $results.Add($detail)
 Assert-Status "article detail" $detail @(200)
+if ($detail.Content -notlike "*$updateTitle*") {
+    throw "Updated article title not found in detail response"
+}
+Write-Host "[PASS] article detail contains updated title" -ForegroundColor Green
+
+$deleteDraft = Invoke-AkhHttp -Method POST -Url "$BaseUrl/api/articles/draft" -Headers $userAuth -Body @{
+    title = "Delete acceptance article $timestamp"
+    content = "This article is created only for logical delete acceptance."
+    summary = "Delete acceptance"
+}
+$results.Add($deleteDraft)
+Assert-Status "create delete-test draft" $deleteDraft @(200)
+$DeleteArticleId = Get-ArticleId $deleteDraft
+$deleteArticle = Invoke-AkhHttp -Method DELETE -Url "$BaseUrl/api/articles/$DeleteArticleId" -Headers $userAuth
+$results.Add($deleteArticle)
+Assert-Status "logical delete article" $deleteArticle @(200)
+$deletedDetail = Invoke-AkhHttp -Method GET -Url "$BaseUrl/api/articles/$DeleteArticleId"
+$results.Add($deletedDetail)
+Assert-ApiCodeNotSuccess "deleted article detail" $deletedDetail
 
 Write-Step "Ranking and AI routes through gateway"
 $ranking = Invoke-AkhHttp -Method GET -Url "$BaseUrl/api/ranking/top10"
@@ -213,6 +334,12 @@ $analysis = Invoke-AkhHttp -Method GET -Url "$BaseUrl/api/ai/articles/$ArticleId
 $results.Add($analysis)
 Assert-Status "ai article analysis" $analysis @(200)
 
+Write-Step "RabbitMQ fanout evidence"
+$tagQueue = Get-RabbitQueueEvidence -Base $RabbitMqUrl -Queue "article.tag.queue"
+if ($null -ne $tagQueue) { $results.Add($tagQueue) }
+$auditQueue = Get-RabbitQueueEvidence -Base $RabbitMqUrl -Queue "article.audit.queue"
+if ($null -ne $auditQueue) { $results.Add($auditQueue) }
+
 if (-not $SkipRateLimit) {
     Write-Step "Rate limit check"
     if ([string]::IsNullOrWhiteSpace($AdminToken)) {
@@ -225,7 +352,16 @@ if (-not $SkipRateLimit) {
             enabled = $true
         }
         $results.Add($setLimit)
-        Assert-Status "admin updates rate limit to 5" $setLimit @(200)
+        Assert-Status "admin publishes Nacos rate limit to 5" $setLimit @(200)
+
+        $nacosConfig = Get-NacosConfigContent -Base $NacosUrl
+        Write-Host "Nacos gateway-service.yml:"
+        Write-Host $nacosConfig
+        if ($nacosConfig -notlike "*max-requests: 5*") {
+            throw "Nacos config does not contain max-requests: 5"
+        }
+        Write-Host "[PASS] Nacos config contains max-requests: 5" -ForegroundColor Green
+        Wait-RateLimitConfig -ExpectedText '"maxRequests":5' -Base $BaseUrl -Headers $adminAuth
 
         $hit429 = $false
         for ($i = 1; $i -le 8; $i++) {
@@ -250,7 +386,8 @@ if (-not $SkipRateLimit) {
             enabled = $true
         }
         $results.Add($restoreLimit)
-        Assert-Status "restore default rate limit" $restoreLimit @(200)
+        Assert-Status "restore default Nacos rate limit" $restoreLimit @(200)
+        Wait-RateLimitConfig -ExpectedText '"maxRequests":20' -Base $BaseUrl -Headers $adminAuth
     }
 }
 

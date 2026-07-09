@@ -6,6 +6,8 @@ import com.ai.knowledgehub.article.entity.Article;
 import com.ai.knowledgehub.article.mapper.ArticleMapper;
 import com.ai.knowledgehub.article.vo.ArticleVO;
 import com.ai.knowledgehub.article.config.MqConfig;
+import com.ai.knowledgehub.common.exception.BusinessException;
+import com.ai.knowledgehub.common.result.ResultCode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -158,9 +160,8 @@ public class ArticleService {
             throw new RuntimeException("文章已被删除");
         }
 
-        article.setDeleted(1);
-        article.setUpdatedAt(LocalDateTime.now());
-        articleMapper.updateById(article);
+        articleMapper.deleteById(articleId);
+        rankingClient.notifyDelete(articleId);
 
         log.info("删除文章成功，文章ID: {}", articleId);
     }

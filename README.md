@@ -12,7 +12,7 @@
 - 阅读、点赞、评论、发布行为实时更新 Redis ZSET 热榜。
 - 发布文章后发送 RabbitMQ 广播消息，由 AI 标签提取和 AI 合规检测消费者异步处理。
 - 支持 AI 续写接口，其中流式续写通过 SSE 逐字或逐句返回。
-- 通过 Spring Cloud Gateway 统一入口、JWT 鉴权和动态限流。
+- 通过 Spring Cloud Gateway 统一入口、JWT 鉴权，并由 Nacos 动态下发网关限流配置。
 
 ## 推荐技术栈
 
@@ -20,6 +20,7 @@
 - 数据库：MySQL 8.0（生产）/ H2（本地 dev）。
 - 缓存与热榜：Redis 7，使用 ZSET、缓存和限流计数。
 - 消息队列：RabbitMQ 3，使用 Fanout Exchange 广播文章发布事件。
+- 配置中心：Nacos 2，动态下发 Gateway 限流参数。
 - ORM：MyBatis-Plus 3.5.5。
 - API 文档：Knife4j 4.4 + OpenAPI 3。
 - AI 接口：OpenAI 兼容接口、通义、智谱或 Mock LLM。
@@ -37,7 +38,7 @@ ai-knowledgehub/
 ├── common/               # 公共模块（统一返回、异常、JWT、MyBatis-Plus 配置、Swagger、Page）
 ├── docs/                 # 项目文档与数据库脚本
 ├── postman/              # Postman 测试集
-├── docker-compose.yml    # MySQL + Redis + RabbitMQ
+├── docker-compose.yml    # MySQL + Redis + RabbitMQ + Nacos
 ├── .env.example          # 环境变量示例
 └── README.md
 ```
@@ -46,7 +47,7 @@ ai-knowledgehub/
 
 | 服务 | 端口 | 负责人 | 主要职责 |
 | --- | --- | --- | --- |
-| gateway-service | 8080 | A | 统一入口、路由转发、JWT 校验、角色权限判断、IP 限流、动态限流参数读取 |
+| gateway-service | 8080 | A | 统一入口、路由转发、JWT 校验、角色权限判断、IP 限流、Nacos 动态限流参数读取 |
 | user-service | 8081 | A | 用户注册、登录、注销、个人信息、角色识别、Token 黑名单（加分项） |
 | article-service | 8082 | B | 文章草稿、修改、发布、逻辑删除、列表、详情、评论、点赞 |
 | ranking-service | 8083 | B | Redis ZSET 文章热榜、阅读/点赞/评论热度更新、Top10 查询 |
@@ -75,7 +76,7 @@ ai-knowledgehub/
 | --- | --- | --- |
 | JDK | 17 | 强制要求，被 `maven-enforcer-plugin` 校验 |
 | Maven | 3.8.0 | 强制要求，被 `maven-enforcer-plugin` 校验 |
-| Docker | 20.10 | 启动 MySQL/Redis/RabbitMQ |
+| Docker | 20.10 | 启动 MySQL/Redis/RabbitMQ/Nacos |
 | Docker Compose | v2 | 启动中间件编排 |
 
 ### 2. 启动基础设施
@@ -94,11 +95,12 @@ docker compose up -d
 - MySQL 8.0（端口 3306，自动执行 `docs/database-init.sql`）
 - Redis 7（端口 6379，可选密码）
 - RabbitMQ 3（端口 5672，管理界面 15672）
+- Nacos 2（端口 8848，控制台 `http://localhost:8848/nacos`）
 
 健康检查：
 ```bash
 docker ps
-# 期望看到 3 个容器均显示 "healthy"
+# 期望看到 MySQL、Redis、RabbitMQ、Nacos 容器均显示 healthy 或 Up
 ```
 
 ### 3. 初始化数据库
@@ -146,6 +148,12 @@ Windows 本地也可以使用辅助脚本按同样顺序启动并记录日志：
 powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1
 ```
 
+录屏验收建议显式启用 Redis 热榜模式并检查 Nacos：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-all-services.ps1 -RankingUseRedis
+```
+
 停止由脚本启动的服务：
 
 ```powershell
@@ -157,6 +165,7 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-all-services.ps1
 - 网关地址：`http://localhost:8080`
 - Swagger UI：每个服务独立 `http://localhost:8081/doc.html` 等
 - RabbitMQ 管理：`http://localhost:15672`（guest / guest）
+- Nacos 控制台：`http://localhost:8848/nacos`（nacos / nacos）
 - H2 控制台（dev）：`http://localhost:8081/h2-console`
 
 ### 7. 测试接口
@@ -173,6 +182,12 @@ powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\acceptance-gateway.ps1 -AdminToken "<admin-token>"
+```
+
+也可以单独验证 Nacos 配置中心动态限流：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\acceptance-nacos-rate-limit.ps1 -AdminToken "<admin-token>"
 ```
 
 详细验收说明见 `docs/acceptance/A-gateway-unified-entry-acceptance.md`，最终截图建议放在 `docs/screenshots/acceptance/`。
@@ -224,7 +239,7 @@ A：下游服务还没启动，或服务注册失败。检查：
 docker logs akh-mysql  # MySQL 状态
 docker logs akh-redis   # Redis 状态
 ```
-确认 3 个中间件都 healthy 后，再启动下游服务。
+确认 MySQL、Redis、RabbitMQ、Nacos 都 healthy 或 Up 后，再启动下游服务。
 
 ### Q4：H2 控制台看不到 `user` 表
 
